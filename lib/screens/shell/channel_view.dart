@@ -19,13 +19,6 @@ class ChannelView extends ConsumerWidget {
     final messagesAsync = ref.watch(messagesProvider(channel.id));
     final replyTo = ref.watch(replyToMessageProvider);
 
-    ref.listen(messagesProvider(channel.id), (prev, _) {
-      final uid = ref.read(currentUserProvider)?.uid;
-      if (uid != null) {
-        ref.read(firestoreServiceProvider).markChannelRead(uid, channel.id);
-      }
-    });
-
     return Container(
       color: SlekkeColors.surfaceVariant,
       child: Column(
@@ -214,7 +207,7 @@ class _PinnedMessagesPanel extends ConsumerWidget {
                     return ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: messages.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (ctx, i) =>
                           const Divider(height: 1, color: SlekkeColors.divider),
                       itemBuilder: (_, i) {
                         final msg = messages[i];
@@ -360,9 +353,27 @@ class _MessageListState extends ConsumerState<_MessageList> {
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    _markRead();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollCtrl.hasClients) {
-        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      // Second pass: ListView.builder measures lazily, so maxScrollExtent
+      // may not be final on the first frame. A second callback ensures
+      // we land at the true bottom once layout has fully settled.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollCtrl.hasClients) {
+          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+        }
+      });
+    });
+  }
+
+  void _markRead() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final uid = ref.read(currentUserProvider)?.uid;
+      if (uid != null) {
+        ref.read(firestoreServiceProvider).markChannelRead(uid, widget.channelId);
       }
     });
   }
@@ -370,10 +381,11 @@ class _MessageListState extends ConsumerState<_MessageList> {
   @override
   void didUpdateWidget(_MessageList old) {
     super.didUpdateWidget(old);
-    // Clear cached older messages when switching channels
+    // Clear cached older messages and re-mark read when switching channels
     if (old.channelId != widget.channelId) {
       _older = [];
       _noMore = false;
+      _markRead();
     }
     if (widget.messages.length > old.messages.length &&
         old.messages.isNotEmpty) {

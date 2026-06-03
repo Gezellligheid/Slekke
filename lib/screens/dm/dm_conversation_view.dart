@@ -28,6 +28,15 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
       _atBottom = _scrollCtrl.position.pixels >=
           _scrollCtrl.position.maxScrollExtent - 80;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollCtrl.hasClients) {
+          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+        }
+      });
+    });
   }
 
   @override

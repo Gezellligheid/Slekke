@@ -117,13 +117,19 @@ class _MessageInputState extends ConsumerState<MessageInput> {
 
       _stopTyping();
       final svc = ref.read(firestoreServiceProvider);
-      // If sending into a DM channel, also update the DM's lastMessageAt
-      // so the sidebar preview and notification watcher stay current.
       final isDm = ref.read(selectedDmIdProvider) == widget.channelId;
-      if (isDm && text.isNotEmpty) {
-        svc.updateDmLastMessage(
-            dmId: widget.channelId, lastMessage: text, authorId: user.uid);
+
+      // Mark as read BEFORE sending so our own message doesn't flash as unread.
+      if (isDm) {
+        svc.markDmRead(user.uid, widget.channelId);
+        if (text.isNotEmpty) {
+          svc.updateDmLastMessage(
+              dmId: widget.channelId, lastMessage: text, authorId: user.uid);
+        }
+      } else {
+        svc.markChannelRead(user.uid, widget.channelId);
       }
+
       await svc.sendMessage(
         channelId: widget.channelId,
         content: text,

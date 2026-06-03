@@ -116,16 +116,27 @@ class _DmTileState extends ConsumerState<_DmTile> {
     final other = widget.dm.other(myUid);
     final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
     final lastReadAt = reads['dm_${widget.dm.id}'];
+    // Use dms/{id}.lastMessageAt if set; fall back to channels/{id}.lastMessageAt
+    // (sendMessage always writes the flat channels doc, so this covers older DMs too).
+    final channelLastMsgAt =
+        ref.watch(channelLastMessageAtProvider(widget.dm.id)).valueOrNull;
+    final effectiveLastMsgAt = widget.dm.lastMessageAt ?? channelLastMsgAt;
     final hasUnread = !widget.selected &&
-        widget.dm.lastMessageAt != null &&
-        (lastReadAt == null || widget.dm.lastMessageAt!.isAfter(lastReadAt));
+        effectiveLastMsgAt != null &&
+        (lastReadAt == null || effectiveLastMsgAt.isAfter(lastReadAt));
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          widget.onTap();
+          final uid = ref.read(currentUserProvider)?.uid;
+          if (uid != null) {
+            ref.read(firestoreServiceProvider).markDmRead(uid, widget.dm.id);
+          }
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
           height: 52,

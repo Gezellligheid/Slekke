@@ -125,27 +125,28 @@ final orgChannelMetaProvider = StreamProvider.family<
   return ref.watch(firestoreServiceProvider).watchOrgChannelMeta(orgId);
 });
 
-int _countUnread(Map<String, DateTime?> meta, Map<String, DateTime> reads) =>
-    meta.entries.where((e) {
-      final lastMsg = e.value;
-      final lastRead = reads[e.key];
-      return lastMsg != null &&
-          (lastRead == null || lastMsg.isAfter(lastRead));
-    }).length;
+bool _isUnread(DateTime? lastMsg, DateTime? lastRead) =>
+    lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
 
 final shellUnreadCountProvider = Provider.family<int, String>((ref, shellId) {
   final meta = ref.watch(shellChannelMetaProvider(shellId)).valueOrNull ?? {};
   final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
-  return _countUnread(meta, reads);
+  final activeChannelId = ref.watch(selectedChannelProvider)?.id;
+  return meta.entries.where((e) {
+    if (e.key == activeChannelId) return false; // currently viewing
+    return _isUnread(e.value, reads[e.key]);
+  }).length;
 });
 
 final orgUnreadCountProvider = Provider.family<int, String>((ref, orgId) {
   final meta = ref.watch(orgChannelMetaProvider(orgId)).valueOrNull ?? {};
   final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+  final activeChannelId = ref.watch(selectedChannelProvider)?.id;
+  final myUid = ref.watch(currentUserProvider)?.uid;
   return meta.entries.where((e) {
-    final lastMsg = e.value.at;
-    final lastRead = reads[e.key];
-    return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+    if (e.key == activeChannelId) return false; // currently viewing
+    if (e.value.authorId != null && e.value.authorId == myUid) return false; // own message
+    return _isUnread(e.value.at, reads[e.key]);
   }).length;
 });
 
@@ -192,10 +193,13 @@ final orgChannelNotifsProvider =
 final dmUnreadCountProvider = Provider<int>((ref) {
   final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
   final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+  final activeDmId = ref.watch(selectedDmIdProvider);
+  final dmMode = ref.watch(dmModeProvider);
+  final myUid = ref.watch(currentUserProvider)?.uid;
   return dms.where((dm) {
-    final lastMsg = dm.lastMessageAt;
-    final lastRead = reads['dm_${dm.id}'];
-    return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+    if (dmMode && dm.id == activeDmId) return false; // currently viewing
+    if (dm.lastMessageAuthorId != null && dm.lastMessageAuthorId == myUid) return false; // own message
+    return _isUnread(dm.lastMessageAt, reads['dm_${dm.id}']);
   }).length;
 });
 
