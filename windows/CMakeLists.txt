@@ -30,7 +30,7 @@ set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 
 # Use Unicode for all projects.
-add_definitions(-DUNICODE -D_UNICODE)
+add_definitions(-DUNICODE -D_UNICODE -D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 
 # Compilation settings that should be applied to most targets.
 #
@@ -39,7 +39,7 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /wd"4996")
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
@@ -57,22 +57,45 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Patch the extracted Firebase C++ SDK CMakeLists.txt when it uses
+# cmake_minimum_required(VERSION 3.1), which errors in CMake 3.27+.
+# The firebase_core plugin extracts the SDK during the include above.
+# Writing the patched file causes CMake to re-configure automatically;
+# the second configure finds the extracted dir and skips re-extraction.
+set(_fb_cmake "${CMAKE_BINARY_DIR}/extracted/firebase_cpp_sdk_windows/CMakeLists.txt")
+if(EXISTS "${_fb_cmake}")
+  file(READ "${_fb_cmake}" _fb_content)
+  if("${_fb_content}" MATCHES "cmake_minimum_required\\(VERSION 3\\.1\\)")
+    string(REPLACE "cmake_minimum_required(VERSION 3.1)"
+                   "cmake_minimum_required(VERSION 3.5)"
+                   _fb_patched "${_fb_content}")
+    file(WRITE "${_fb_cmake}" "${_fb_patched}")
+    message(STATUS "Slekke: Patched Firebase SDK cmake_minimum_required 3.1 -> 3.5")
+  endif()
+endif()
+unset(_fb_cmake)
+unset(_fb_content)
+unset(_fb_patched)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
 # run in place. This is done instead of making a separate bundle (as on Linux)
 # so that building and running from within Visual Studio will work.
-set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+#
+# Use CMAKE_BINARY_DIR/runner/$<CONFIG> directly rather than CMAKE_INSTALL_PREFIX
+# because generator expressions are not evaluated in CMAKE_INSTALL_PREFIX, which
+# causes CMake to fall back to "C:/Program Files/<name>" (requires admin rights).
+# Generator expressions in install() DESTINATION are supported since CMake 3.14.
+set(BUILD_BUNDLE_DIR "${CMAKE_BINARY_DIR}/runner/$<CONFIG>")
 # Make the "install" step default, as it's required to run.
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
-endif()
+set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/runner" CACHE PATH "..." FORCE)
 
-set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
-set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+set(INSTALL_BUNDLE_DATA_DIR "${BUILD_BUNDLE_DIR}/data")
+set(INSTALL_BUNDLE_LIB_DIR "${BUILD_BUNDLE_DIR}")
 
-install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

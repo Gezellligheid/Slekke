@@ -72,9 +72,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               const SizedBox(width: 32),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: SelectionArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   // Reply reference
                   if (msg.replyToId != null) _ReplyPreview(message: msg),
                   // Author + timestamp
@@ -158,7 +159,8 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                         channelId: widget.channelId,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
             // Action toolbar (on hover)
