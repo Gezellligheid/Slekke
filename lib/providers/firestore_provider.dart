@@ -120,8 +120,8 @@ final shellChannelMetaProvider =
   return ref.watch(firestoreServiceProvider).watchShellChannelMeta(shellId);
 });
 
-final orgChannelMetaProvider =
-    StreamProvider.family<Map<String, DateTime?>, String>((ref, orgId) {
+final orgChannelMetaProvider = StreamProvider.family<
+    Map<String, ({DateTime? at, String? authorId})>, String>((ref, orgId) {
   return ref.watch(firestoreServiceProvider).watchOrgChannelMeta(orgId);
 });
 
@@ -142,7 +142,11 @@ final shellUnreadCountProvider = Provider.family<int, String>((ref, shellId) {
 final orgUnreadCountProvider = Provider.family<int, String>((ref, orgId) {
   final meta = ref.watch(orgChannelMetaProvider(orgId)).valueOrNull ?? {};
   final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
-  return _countUnread(meta, reads);
+  return meta.entries.where((e) {
+    final lastMsg = e.value.at;
+    final lastRead = reads[e.key];
+    return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+  }).length;
 });
 
 // ── Messages ──────────────────────────────────────────────────────────────────

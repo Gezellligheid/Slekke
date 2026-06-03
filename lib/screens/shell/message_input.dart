@@ -121,7 +121,8 @@ class _MessageInputState extends ConsumerState<MessageInput> {
       // so the sidebar preview and notification watcher stay current.
       final isDm = ref.read(selectedDmIdProvider) == widget.channelId;
       if (isDm && text.isNotEmpty) {
-        svc.updateDmLastMessage(dmId: widget.channelId, lastMessage: text);
+        svc.updateDmLastMessage(
+            dmId: widget.channelId, lastMessage: text, authorId: user.uid);
       }
       await svc.sendMessage(
         channelId: widget.channelId,

@@ -65,15 +65,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble>
       MessageDensity.spacious    => (4.0, 24.0, 4.0),
     };
 
-    ref.listen<String?>(highlightedMessageIdProvider, (_, next) {
-      if (next == msg.id) {
-        _flashCtrl.forward(from: 0).then((_) {
-          if (mounted) {
-            ref.read(highlightedMessageIdProvider.notifier).state = null;
-          }
+    final highlightedId = ref.watch(highlightedMessageIdProvider);
+    if (highlightedId == msg.id && !_flashCtrl.isAnimating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _flashCtrl.isAnimating) return;
+        Future.delayed(const Duration(seconds: 1), () {
+          if (!mounted || _flashCtrl.isAnimating) return;
+          _flashCtrl.forward(from: 0).then((_) {
+            if (mounted) {
+              ref.read(highlightedMessageIdProvider.notifier).state = null;
+            }
+          });
         });
-      }
-    });
+      });
+    }
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),

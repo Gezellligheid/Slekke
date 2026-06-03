@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/channel_model.dart';
 import '../../models/organization_model.dart';
 import '../../providers/firestore_provider.dart';
+import '../../services/session_service.dart';
 import '../dm/dm_conversation_view.dart';
 import '../dm/dm_sidebar.dart';
 import '../onboarding/create_or_join_screen.dart';
@@ -19,6 +21,56 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _onboardingOpen = false;
+  bool _sessionRestored = false;
+
+  Future<void> _initSession(List<OrganizationModel> orgs) async {
+    final session = await SessionService.load();
+
+    if (session == null) {
+      // No saved session — fall back to selecting the first org
+      if (!ref.read(dmModeProvider) && ref.read(selectedOrgIdProvider) == null) {
+        ref.read(selectedOrgIdProvider.notifier).state = orgs.first.id;
+      }
+      return;
+    }
+
+    if (session.isDm && session.dmId != null) {
+      ref.read(dmModeProvider.notifier).state = true;
+      ref.read(selectedDmIdProvider.notifier).state = session.dmId;
+      return;
+    }
+
+    // Channel session
+    final orgId = session.orgId;
+    final shellId = session.shellId;
+    final categoryId = session.categoryId;
+    final channelId = session.channelId;
+
+    if (orgId == null || shellId == null || categoryId == null || channelId == null) {
+      ref.read(selectedOrgIdProvider.notifier).state = orgs.first.id;
+      return;
+    }
+
+    // Verify org still exists
+    if (!orgs.any((o) => o.id == orgId)) {
+      ref.read(selectedOrgIdProvider.notifier).state = orgs.first.id;
+      return;
+    }
+
+    ref.read(dmModeProvider.notifier).state = false;
+    ref.read(selectedOrgIdProvider.notifier).state = orgId;
+    ref.read(selectedShellIdProvider.notifier).state = shellId;
+
+    final channel = await ref.read(firestoreServiceProvider).getChannelById(
+      orgId: orgId,
+      shellId: shellId,
+      categoryId: categoryId,
+      channelId: channelId,
+    );
+    if (mounted && channel != null) {
+      ref.read(selectedChannelStateProvider.notifier).state = channel;
+    }
+  }
 
   void _showOnboarding() {
     if (_onboardingOpen) return;
@@ -47,14 +99,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final selectedDmId = ref.watch(selectedDmIdProvider);
     final dmsAsync = ref.watch(userDmsProvider);
 
+    // Restore last session once orgs have loaded
     ref.listen<AsyncValue<List<OrganizationModel>>>(userOrgsProvider, (_, next) {
       final orgs = next.valueOrNull;
-      if (orgs != null &&
-          orgs.isNotEmpty &&
-          !ref.read(dmModeProvider) &&
-          ref.read(selectedOrgIdProvider) == null) {
-        ref.read(selectedOrgIdProvider.notifier).state = orgs.first.id;
-      }
+      if (orgs == null || orgs.isEmpty || _sessionRestored) return;
+      _sessionRestored = true;
+      _initSession(orgs);
+    });
+
+    // Save session whenever channel or DM selection changes
+    ref.listen<ChannelModel?>(selectedChannelStateProvider, (_, next) {
+      if (next == null) return;
+      SessionService.saveChannel(
+        orgId: next.organizationId,
+        shellId: next.shellId,
+        categoryId: next.categoryId,
+        channelId: next.id,
+      );
+    });
+
+    ref.listen<String?>(selectedDmIdProvider, (_, next) {
+      if (next == null) return;
+      if (ref.read(dmModeProvider)) SessionService.saveDm(next);
     });
 
     return orgsAsync.when(

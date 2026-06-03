@@ -29,12 +29,14 @@ class DmModel {
   final List<DmParticipant> participants;
   final String? lastMessage;
   final DateTime? lastMessageAt;
+  final String? lastMessageAuthorId;
 
   const DmModel({
     required this.id,
     required this.participants,
     this.lastMessage,
     this.lastMessageAt,
+    this.lastMessageAuthorId,
   });
 
   // Stable ID: sort UIDs so A→B and B→A always produce the same document
@@ -56,8 +58,8 @@ class DmModel {
           .map((p) => DmParticipant.fromMap(p as Map<String, dynamic>))
           .toList(),
       lastMessage: d['lastMessage'] as String?,
-      lastMessageAt:
-          (d['lastMessageAt'] as Timestamp?)?.toDate(),
+      lastMessageAt: (d['lastMessageAt'] as Timestamp?)?.toDate(),
+      lastMessageAuthorId: d['lastMessageAuthorId'] as String?,
     );
   }
 }

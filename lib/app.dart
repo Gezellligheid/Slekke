@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'models/dm_model.dart';
+import 'providers/auth_provider.dart';
 import 'providers/firestore_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
@@ -69,10 +70,14 @@ class _DmNotificationWatcherState
         final newTime = dm.lastMessageAt;
         if (newTime == null || prevTime == null) continue;
         if (newTime.isAfter(prevTime)) {
-          ref.read(notificationServiceProvider).onNewMessage(
-                channelId: dm.id,
-                isDm: true,
-              );
+          final sentByMe = dm.lastMessageAuthorId != null &&
+              dm.lastMessageAuthorId == ref.read(currentUserProvider)?.uid;
+          if (!sentByMe) {
+            ref.read(notificationServiceProvider).onNewMessage(
+                  channelId: dm.id,
+                  isDm: true,
+                );
+          }
           break; // one sound per batch update
         }
       }
@@ -80,17 +85,20 @@ class _DmNotificationWatcherState
 
     // ── Channel notifications via single org metadata stream ─────────────────
     final orgId = ref.watch(selectedOrgIdProvider);
+    final currentUid = ref.watch(currentUserProvider)?.uid;
     if (orgId != null) {
-      ref.listen<AsyncValue<Map<String, DateTime?>>>(
+      ref.listen<AsyncValue<Map<String, ({DateTime? at, String? authorId})>>>(
         orgChannelMetaProvider(orgId),
         (prev, next) {
           final prevMeta = prev?.valueOrNull;
           final nextMeta = next.valueOrNull;
           if (prevMeta == null || nextMeta == null) return;
           for (final entry in nextMeta.entries) {
-            final newTime = entry.value;
-            final oldTime = prevMeta[entry.key];
+            final newTime = entry.value.at;
+            final oldTime = prevMeta[entry.key]?.at;
+            final authorId = entry.value.authorId;
             if (newTime == null) continue;
+            if (authorId != null && authorId == currentUid) continue;
             if (oldTime == null || newTime.isAfter(oldTime)) {
               ref
                   .read(notificationServiceProvider)

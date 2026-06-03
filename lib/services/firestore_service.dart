@@ -118,14 +118,19 @@ class FirestoreService {
               d.id: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
           });
 
-  Stream<Map<String, DateTime?>> watchOrgChannelMeta(String orgId) => _db
-      .collection('channels')
-      .where('orgId', isEqualTo: orgId)
-      .snapshots()
-      .map((s) => {
-            for (final d in s.docs)
-              d.id: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
-          });
+  Stream<Map<String, ({DateTime? at, String? authorId})>> watchOrgChannelMeta(
+          String orgId) =>
+      _db
+          .collection('channels')
+          .where('orgId', isEqualTo: orgId)
+          .snapshots()
+          .map((s) => {
+                for (final d in s.docs)
+                  d.id: (
+                    at: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
+                    authorId: d.data()['lastMessageAuthorId'] as String?,
+                  ),
+              });
 
   Stream<List<ChannelNotifEntry>> watchOrgChannelNotifications(String orgId) =>
       _db
@@ -649,10 +654,12 @@ class FirestoreService {
   Future<void> updateDmLastMessage({
     required String dmId,
     required String lastMessage,
+    required String authorId,
   }) =>
       _db.collection('dms').doc(dmId).update({
         'lastMessage': lastMessage,
         'lastMessageAt': FieldValue.serverTimestamp(),
+        'lastMessageAuthorId': authorId,
       });
 
   // ── Typing ─────────────────────────────────────────────────────────────────
@@ -762,6 +769,7 @@ class FirestoreService {
   }) async {
     final meta = <String, dynamic>{
       'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessageAuthorId': authorId,
     };
     if (shellId != null) meta['shellId'] = shellId;
     if (orgId != null) meta['orgId'] = orgId;
