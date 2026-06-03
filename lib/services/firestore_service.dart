@@ -794,7 +794,12 @@ class FirestoreService {
         'isEdited': false,
         'editedAt': null,
       }),
-      _db.collection('channels').doc(channelId).set(meta, SetOptions(merge: true)),
+      // DMs (orgId == null): replace the whole doc so stale orgId/shellId fields
+      // from earlier buggy sends are removed. Channels: merge to preserve any
+      // other metadata written outside of sendMessage.
+      orgId == null
+          ? _db.collection('channels').doc(channelId).set(meta)
+          : _db.collection('channels').doc(channelId).set(meta, SetOptions(merge: true)),
     ]);
   }
 

@@ -136,11 +136,14 @@ class _MessageInputState extends ConsumerState<MessageInput> {
         authorId: user.uid,
         authorName: ref.read(currentUserProfileProvider).valueOrNull?.displayName ?? user.displayName ?? 'Unknown',
         authorPhotoUrl: ref.read(currentUserProfileProvider).valueOrNull?.photoUrl ?? user.photoURL,
-        shellId: ref.read(selectedShellIdProvider),
-        orgId: ref.read(selectedOrgIdProvider),
-        channelName: ref.read(selectedChannelProvider)?.name,
-        shellName: ref.read(selectedShellProvider)?.name,
-        categoryId: ref.read(selectedChannelProvider)?.categoryId,
+        // DMs must not carry org/shell metadata — otherwise the flat channels
+        // doc gets tagged with the sender's current org and appears as an
+        // unread channel in watchOrgChannelMeta.
+        shellId: isDm ? null : ref.read(selectedShellIdProvider),
+        orgId: isDm ? null : ref.read(selectedOrgIdProvider),
+        channelName: isDm ? null : ref.read(selectedChannelProvider)?.name,
+        shellName: isDm ? null : ref.read(selectedShellProvider)?.name,
+        categoryId: isDm ? null : ref.read(selectedChannelProvider)?.categoryId,
         replyToId: replyTo?.id,
         replyToContent: replyTo?.content,
         replyToAuthorName: replyTo?.authorName,
