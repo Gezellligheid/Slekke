@@ -35,20 +35,34 @@ class _NotificationPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final orgId = ref.watch(selectedOrgIdProvider);
+    final myUid = ref.watch(currentUserProvider)?.uid ?? '';
     final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
     final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+    final activeDmId = ref.watch(selectedDmIdProvider);
+    final dmMode = ref.watch(dmModeProvider);
+    final activeChannelId = ref.watch(selectedChannelProvider)?.id;
 
+    // DMs — use channels/{id} fallback for DMs without lastMessageAt set
     final unreadDms = dms.where((dm) {
-      final lastMsg = dm.lastMessageAt;
+      if (dmMode && dm.id == activeDmId) return false; // currently viewing
+      if (dm.lastMessageAuthorId != null && dm.lastMessageAuthorId == myUid) return false;
+      final channelAt =
+          ref.watch(channelLastMessageAtProvider(dm.id)).valueOrNull;
+      final effectiveAt = dm.lastMessageAt ?? channelAt;
       final lastRead = reads['dm_${dm.id}'];
-      return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+      return effectiveAt != null &&
+          (lastRead == null || effectiveAt.isAfter(lastRead));
     }).toList();
 
+    // Channels — only real channels (shellId non-empty excludes leaked DM docs)
     final allChannelNotifs = orgId != null
         ? (ref.watch(orgChannelNotifsProvider(orgId)).valueOrNull ?? [])
         : <ChannelNotifEntry>[];
 
     final unreadChannels = allChannelNotifs.where((e) {
+      if (e.shellId.isEmpty) return false; // DM doc leaked in — skip
+      if (!dmMode && e.channelId == activeChannelId) return false; // currently viewing
+      if (e.lastMessageAuthorId != null && e.lastMessageAuthorId == myUid) return false;
       final lastRead = reads[e.channelId];
       return lastRead == null || e.lastMessageAt.isAfter(lastRead);
     }).toList();
@@ -132,8 +146,6 @@ class _NotificationPanel extends ConsumerWidget {
                     if (unreadDms.isNotEmpty) ...[
                       _SectionLabel(label: 'Direct Messages'),
                       ...unreadDms.map((dm) {
-                        final myUid =
-                            ref.read(currentUserProvider)?.uid ?? '';
                         final other = dm.other(myUid);
                         return _NotifRow(
                           icon: Icons.chat_bubble_outline,

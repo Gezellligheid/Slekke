@@ -109,7 +109,7 @@ service cloud.firestore {
       allow update: if isSignedIn() &&
         request.auth.uid in resource.data.participantIds &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['lastMessage', 'lastMessageAt']);
+          .hasOnly(['lastMessage', 'lastMessageAt', 'lastMessageAuthorId']);
 
       match /messages/{messageId} {
         allow read: if isSignedIn() &&

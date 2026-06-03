@@ -18,6 +18,7 @@ class ChannelNotifEntry {
   final String categoryId;
   final String orgId;
   final DateTime lastMessageAt;
+  final String? lastMessageAuthorId;
 
   const ChannelNotifEntry({
     required this.channelId,
@@ -27,6 +28,7 @@ class ChannelNotifEntry {
     required this.categoryId,
     required this.orgId,
     required this.lastMessageAt,
+    this.lastMessageAuthorId,
   });
 }
 
@@ -152,6 +154,8 @@ class FirestoreService {
                   categoryId: data['categoryId'] as String? ?? '',
                   orgId: orgId,
                   lastMessageAt: ts,
+                  lastMessageAuthorId:
+                      data['lastMessageAuthorId'] as String?,
                 );
               })
               .whereType<ChannelNotifEntry>()
