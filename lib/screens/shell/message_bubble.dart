@@ -27,13 +27,27 @@ class MessageBubble extends ConsumerStatefulWidget {
   ConsumerState<MessageBubble> createState() => _MessageBubbleState();
 }
 
-class _MessageBubbleState extends ConsumerState<MessageBubble> {
+class _MessageBubbleState extends ConsumerState<MessageBubble>
+    with SingleTickerProviderStateMixin {
   bool _hovered = false;
   bool _editing = false;
   final _editCtrl = TextEditingController();
+  late final AnimationController _flashCtrl;
+  late final Animation<double> _flashAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _flashCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _flashAnim = CurvedAnimation(parent: _flashCtrl, curve: Curves.easeOut);
+  }
 
   @override
   void dispose() {
+    _flashCtrl.dispose();
     _editCtrl.dispose();
     super.dispose();
   }
@@ -51,11 +65,32 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       MessageDensity.spacious    => (4.0, 24.0, 4.0),
     };
 
+    ref.listen<String?>(highlightedMessageIdProvider, (_, next) {
+      if (next == msg.id) {
+        _flashCtrl.forward(from: 0).then((_) {
+          if (mounted) {
+            ref.read(highlightedMessageIdProvider.notifier).state = null;
+          }
+        });
+      }
+    });
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        color: _hovered ? SlekkeColors.elevated.withAlpha(40) : Colors.transparent,
+      child: AnimatedBuilder(
+        animation: _flashAnim,
+        builder: (context, child) {
+          final flashColor = Color.lerp(
+            SlekkeColors.primary.withAlpha(60),
+            Colors.transparent,
+            _flashAnim.value,
+          )!;
+          final hoverColor = _hovered
+              ? SlekkeColors.elevated.withAlpha(40)
+              : Colors.transparent;
+          return Container(
+          color: _flashCtrl.isAnimating ? flashColor : hoverColor,
         padding: EdgeInsets.only(
           left: 16,
           right: 16,
@@ -177,7 +212,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ),
           ],
         ),
-      ),
+          ); // Container
+        },  // AnimatedBuilder builder
+      ),    // AnimatedBuilder
     );
   }
 }

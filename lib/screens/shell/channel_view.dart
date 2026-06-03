@@ -218,7 +218,14 @@ class _PinnedMessagesPanel extends ConsumerWidget {
                           const Divider(height: 1, color: SlekkeColors.divider),
                       itemBuilder: (_, i) {
                         final msg = messages[i];
-                        return Padding(
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            ref.read(highlightedMessageIdProvider.notifier).state = msg.id;
+                          },
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,7 +315,8 @@ class _PinnedMessagesPanel extends ConsumerWidget {
                                 ),
                             ],
                           ),
-                        );
+                        )),  // Padding + MouseRegion
+                        );  // GestureDetector
                       },
                     );
                   },
@@ -342,6 +350,7 @@ class _MessageList extends ConsumerStatefulWidget {
 
 class _MessageListState extends ConsumerState<_MessageList> {
   final _scrollCtrl = ScrollController();
+  final _highlightKey = GlobalKey();
   bool _atBottom = true;
   List<MessageModel> _older = [];
   bool _loadingMore = false;
@@ -424,6 +433,23 @@ class _MessageListState extends ConsumerState<_MessageList> {
 
   @override
   Widget build(BuildContext context) {
+    final highlightedId = ref.watch(highlightedMessageIdProvider);
+
+    ref.listen<String?>(highlightedMessageIdProvider, (_, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _highlightKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    });
+
     final all = [..._older, ...widget.messages];
     if (all.isEmpty) {
       return const Center(
@@ -469,6 +495,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
             prev.authorId == msg.authorId &&
             msg.timestamp.difference(prev.timestamp).inMinutes < 5;
         return MessageBubble(
+          key: msg.id == highlightedId ? _highlightKey : null,
           message: msg,
           grouped: isGrouped,
           channelId: widget.channelId,

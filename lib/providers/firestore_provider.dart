@@ -159,6 +159,9 @@ final messagesProvider = StreamProvider.autoDispose
 // Reply-to state
 final replyToMessageProvider = StateProvider<MessageModel?>((ref) => null);
 
+// ID of message to scroll to + flash
+final highlightedMessageIdProvider = StateProvider<String?>((ref) => null);
+
 final pinnedMessagesProvider =
     StreamProvider.family<List<MessageModel>, String>((ref, channelId) {
   return ref.watch(firestoreServiceProvider).watchPinnedMessages(channelId);
