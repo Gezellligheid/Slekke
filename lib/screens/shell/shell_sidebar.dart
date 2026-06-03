@@ -525,6 +525,11 @@ class _CategoryTileState extends ConsumerState<_CategoryTile> {
               name: name,
             );
       case 'delete':
+        final ok = await _confirmDelete(
+          context,
+          'Delete "${widget.category.name}"? All channels inside will also be removed.',
+        );
+        if (ok != true || !context.mounted) return;
         await ref.read(firestoreServiceProvider).deleteCategory(
               orgId: widget.orgId,
               shellId: widget.shellId,
@@ -718,6 +723,11 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
               name: name.toLowerCase().replaceAll(' ', '-'),
             );
       case 'delete':
+        final ok = await _confirmDelete(
+          context,
+          'Delete #${widget.channel.name}? This cannot be undone.',
+        );
+        if (ok != true || !context.mounted) return;
         if (ref.read(selectedChannelProvider)?.id == widget.channel.id) {
           ref.read(selectedChannelStateProvider.notifier).state = null;
         }
@@ -757,6 +767,31 @@ class _RightClickArea extends StatelessWidget {
     );
   }
 }
+
+Future<bool?> _confirmDelete(BuildContext context, String message) =>
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SlekkeColors.surface,
+        title: const Text('Confirm delete',
+            style: TextStyle(color: SlekkeColors.textPrimary, fontSize: 15)),
+        content: Text(message,
+            style: const TextStyle(
+                color: SlekkeColors.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel',
+                style: TextStyle(color: SlekkeColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(color: SlekkeColors.danger)),
+          ),
+        ],
+      ),
+    );
 
 Future<String?> _nameDialog(
   BuildContext context,

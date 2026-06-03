@@ -213,6 +213,13 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
         icon: Icons.done_all,
         label: 'Mark as read',
       ),
+      if (isOwner || perms.manageOrg)
+        const ContextMenuItem(
+          value: 'rename',
+          icon: Icons.edit_outlined,
+          label: 'Edit org',
+          dividerAbove: true,
+        ),
       if (canManage)
         const ContextMenuItem(
           value: 'settings',
@@ -220,12 +227,20 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
           label: 'Settings',
         ),
       if (!isOwner)
-        const ContextMenuItem(
+        ContextMenuItem(
           value: 'leave',
           icon: Icons.exit_to_app,
           label: 'Leave org',
           color: SlekkeColors.danger,
           dividerAbove: true,
+        ),
+      if (isOwner)
+        ContextMenuItem(
+          value: 'delete',
+          icon: Icons.delete_outline,
+          label: 'Delete org',
+          color: SlekkeColors.danger,
+          dividerAbove: !canManage,
         ),
     ];
 
@@ -240,10 +255,61 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
     switch (result) {
       case 'mark_read':
         _markOrgAsRead();
+      case 'rename':
+        _renameOrg(context);
       case 'settings':
         showOrgSettingsDialog(context);
       case 'leave':
         _confirmLeave(context);
+      case 'delete':
+        _confirmDeleteOrg(context);
+    }
+  }
+
+  Future<void> _renameOrg(BuildContext context) async {
+    final name = await _inputDialog(
+      context,
+      title: 'Rename organisation',
+      hint: 'Organisation name',
+      initial: widget.org.name,
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+    await ref.read(firestoreServiceProvider).updateOrgName(
+          orgId: widget.org.id,
+          name: name,
+        );
+  }
+
+  Future<void> _confirmDeleteOrg(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SlekkeColors.surface,
+        title: const Text('Delete org',
+            style: TextStyle(color: SlekkeColors.textPrimary)),
+        content: Text(
+          'Permanently delete "${widget.org.name}"? This cannot be undone.',
+          style: const TextStyle(color: SlekkeColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel',
+                style: TextStyle(color: SlekkeColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(color: SlekkeColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await ref.read(firestoreServiceProvider).deleteOrg(widget.org.id);
+      ref.read(selectedOrgIdProvider.notifier).state = null;
+      ref.read(selectedShellIdProvider.notifier).state = null;
+      ref.read(selectedChannelStateProvider.notifier).state = null;
     }
   }
 
@@ -418,9 +484,11 @@ class _ShellList extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ...shells.map((shell) => _ShellRow(
+                orgId: org.id,
                 shellId: shell.id,
                 name: shell.name,
                 selected: shell.id == selectedShellId,
+                canManage: canManageShells,
                 onTap: () {
                   ref.read(dmModeProvider.notifier).state = false;
                   ref.read(selectedShellIdProvider.notifier).state = shell.id;
@@ -517,15 +585,19 @@ class _ShellList extends ConsumerWidget {
 }
 
 class _ShellRow extends ConsumerStatefulWidget {
+  final String orgId;
   final String shellId;
   final String name;
   final bool selected;
+  final bool canManage;
   final VoidCallback onTap;
 
   const _ShellRow({
+    required this.orgId,
     required this.shellId,
     required this.name,
     required this.selected,
+    required this.canManage,
     required this.onTap,
   });
 
@@ -543,60 +615,220 @@ class _ShellRowState extends ConsumerState<_ShellRow> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      child: InkWell(
-        onTap: widget.onTap,
-        onHover: (v) => setState(() => _hovered = v),
-        borderRadius: BorderRadius.circular(4),
-        mouseCursor: SystemMouseCursors.click,
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 80),
-          height: 30,
-          padding: const EdgeInsets.only(left: 28, right: 8),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? SlekkeColors.channelSelected
-                : _hovered
-                    ? SlekkeColors.elevated.withAlpha(60)
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.selected
-                      ? SlekkeColors.textPrimary
-                      : SlekkeColors.textMuted,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.name,
-                  style: TextStyle(
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: widget.canManage
+            ? (e) {
+                if (e.buttons == 2) _showShellMenu(context, e.position);
+              }
+            : null,
+        child: InkWell(
+          onTap: widget.onTap,
+          onHover: (v) => setState(() => _hovered = v),
+          borderRadius: BorderRadius.circular(4),
+          mouseCursor: SystemMouseCursors.click,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            height: 30,
+            padding: const EdgeInsets.only(left: 28, right: 8),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? SlekkeColors.channelSelected
+                  : _hovered
+                      ? SlekkeColors.elevated.withAlpha(60)
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: widget.selected
                         ? SlekkeColors.textPrimary
-                        : SlekkeColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: widget.selected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                        : SlekkeColors.textMuted,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              if (count > 0) _UnreadBadge(count: count),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    style: TextStyle(
+                      color: widget.selected
+                          ? SlekkeColors.textPrimary
+                          : SlekkeColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: widget.selected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (count > 0) _UnreadBadge(count: count),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Future<void> _showShellMenu(BuildContext context, Offset position) async {
+    final result = await showContextMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        const ContextMenuItem(
+          value: 'rename',
+          icon: Icons.edit_outlined,
+          label: 'Edit shell',
+        ),
+        ContextMenuItem(
+          value: 'delete',
+          icon: Icons.delete_outline,
+          label: 'Delete shell',
+          color: SlekkeColors.danger,
+          dividerAbove: true,
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (result == 'rename') {
+      final name = await _inputDialog(
+        context,
+        title: 'Rename shell',
+        hint: 'Shell name',
+        initial: widget.name,
+      );
+      if (name == null || name.isEmpty) return;
+      await ref.read(firestoreServiceProvider).updateShell(
+            orgId: widget.orgId,
+            shellId: widget.shellId,
+            name: name,
+          );
+    } else if (result == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: SlekkeColors.surface,
+          title: const Text('Delete shell',
+              style: TextStyle(color: SlekkeColors.textPrimary)),
+          content: Text(
+            'Delete "${widget.name}"? All its categories and channels will be removed.',
+            style: const TextStyle(color: SlekkeColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: SlekkeColors.textMuted)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delete',
+                  style: TextStyle(color: SlekkeColors.danger)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        if (ref.read(selectedShellIdProvider) == widget.shellId) {
+          ref.read(selectedShellIdProvider.notifier).state = null;
+          ref.read(selectedChannelStateProvider.notifier).state = null;
+        }
+        await ref.read(firestoreServiceProvider).deleteShell(
+              orgId: widget.orgId,
+              shellId: widget.shellId,
+            );
+      }
+    }
+  }
+}
+
+// ─── Shared dialog helpers ────────────────────────────────────────────────────
+
+Future<String?> _inputDialog(
+  BuildContext context, {
+  required String title,
+  required String hint,
+  String initial = '',
+}) async {
+  final ctrl = TextEditingController(text: initial);
+  // Select all existing text so the user can immediately replace it
+  ctrl.selection = TextSelection(baseOffset: 0, extentOffset: initial.length);
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => Dialog(
+      child: SizedBox(
+        width: 320,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  color: SlekkeColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                style: const TextStyle(
+                    color: SlekkeColors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(hintText: hint),
+                autofocus: true,
+                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: SlekkeColors.textMuted,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: SlekkeColors.textPrimary,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: () =>
+                        Navigator.of(ctx).pop(ctrl.text.trim()),
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 // ─── Bell button ──────────────────────────────────────────────────────────────
