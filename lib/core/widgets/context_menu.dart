@@ -57,6 +57,7 @@ Future<T?> showContextMenu<T>({
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(ctx).pop(),
+            onSecondaryTap: () => Navigator.of(ctx).pop(),
             child: const SizedBox.expand(),
           ),
           Positioned(

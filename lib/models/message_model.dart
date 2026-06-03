@@ -30,6 +30,7 @@ class MessageModel {
   final List<String> imageUrls;
   final bool isEdited;
   final DateTime? editedAt;
+  final bool isPinned;
 
   const MessageModel({
     required this.id,
@@ -47,6 +48,7 @@ class MessageModel {
     this.imageUrls = const [],
     this.isEdited = false,
     this.editedAt,
+    this.isPinned = false,
   });
 
   factory MessageModel.fromDoc(DocumentSnapshot doc) {
@@ -70,6 +72,7 @@ class MessageModel {
       imageUrls: List<String>.from(d['imageUrls'] ?? []),
       isEdited: d['isEdited'] ?? false,
       editedAt: (d['editedAt'] as Timestamp?)?.toDate(),
+      isPinned: d['isPinned'] ?? false,
     );
   }
 

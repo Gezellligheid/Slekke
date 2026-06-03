@@ -29,6 +29,24 @@ class _MessageInputState extends ConsumerState<MessageInput> {
   bool _isTyping = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void didUpdateWidget(MessageInput old) {
+    super.didUpdateWidget(old);
+    if (old.channelId != widget.channelId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _typingTimer?.cancel();
     _stopTyping();
@@ -98,12 +116,24 @@ class _MessageInputState extends ConsumerState<MessageInput> {
       final replyTo = ref.read(replyToMessageProvider);
 
       _stopTyping();
-      await ref.read(firestoreServiceProvider).sendMessage(
+      final svc = ref.read(firestoreServiceProvider);
+      // If sending into a DM channel, also update the DM's lastMessageAt
+      // so the sidebar preview and notification watcher stay current.
+      final isDm = ref.read(selectedDmIdProvider) == widget.channelId;
+      if (isDm && text.isNotEmpty) {
+        svc.updateDmLastMessage(dmId: widget.channelId, lastMessage: text);
+      }
+      await svc.sendMessage(
         channelId: widget.channelId,
         content: text,
         authorId: user.uid,
         authorName: ref.read(currentUserProfileProvider).valueOrNull?.displayName ?? user.displayName ?? 'Unknown',
         authorPhotoUrl: ref.read(currentUserProfileProvider).valueOrNull?.photoUrl ?? user.photoURL,
+        shellId: ref.read(selectedShellIdProvider),
+        orgId: ref.read(selectedOrgIdProvider),
+        channelName: ref.read(selectedChannelProvider)?.name,
+        shellName: ref.read(selectedShellProvider)?.name,
+        categoryId: ref.read(selectedChannelProvider)?.categoryId,
         replyToId: replyTo?.id,
         replyToContent: replyTo?.content,
         replyToAuthorName: replyTo?.authorName,

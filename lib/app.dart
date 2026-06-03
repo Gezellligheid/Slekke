@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'models/dm_model.dart';
 import 'providers/firestore_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
@@ -42,28 +43,62 @@ class _DmNotificationWatcher extends ConsumerStatefulWidget {
 
 class _DmNotificationWatcherState
     extends ConsumerState<_DmNotificationWatcher> {
-  final Set<String> _seededDms = {};
+  // Track the last-seen lastMessageAt per DM so we detect new messages
+  // via the single userDmsProvider stream instead of N per-DM message streams.
+  final Map<String, DateTime?> _lastDmTimes = {};
+  bool _dmSeeded = false;
 
   @override
   Widget build(BuildContext context) {
-    final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
+    // ── DM notifications via single stream ──────────────────────────────────
+    ref.listen<AsyncValue<List<DmModel>>>(userDmsProvider, (prev, next) {
+      final dms = next.valueOrNull;
+      if (dms == null) return;
 
-    for (final dm in dms) {
-      ref.listen<AsyncValue<List>>(messagesProvider(dm.id), (prev, next) {
-        final msgs = next.valueOrNull;
-        if (msgs == null) return;
-        if (!_seededDms.contains(dm.id)) {
-          _seededDms.add(dm.id);
-          return;
+      if (!_dmSeeded) {
+        for (final dm in dms) {
+          _lastDmTimes[dm.id] = dm.lastMessageAt;
         }
-        final prevCount = prev?.valueOrNull?.length ?? 0;
-        if (msgs.length > prevCount) {
+        _dmSeeded = true;
+        return;
+      }
+
+      for (final dm in dms) {
+        final prevTime = _lastDmTimes[dm.id];
+        _lastDmTimes[dm.id] = dm.lastMessageAt;
+        final newTime = dm.lastMessageAt;
+        if (newTime == null || prevTime == null) continue;
+        if (newTime.isAfter(prevTime)) {
           ref.read(notificationServiceProvider).onNewMessage(
                 channelId: dm.id,
                 isDm: true,
               );
+          break; // one sound per batch update
         }
-      });
+      }
+    });
+
+    // ── Channel notifications via single org metadata stream ─────────────────
+    final orgId = ref.watch(selectedOrgIdProvider);
+    if (orgId != null) {
+      ref.listen<AsyncValue<Map<String, DateTime?>>>(
+        orgChannelMetaProvider(orgId),
+        (prev, next) {
+          final prevMeta = prev?.valueOrNull;
+          final nextMeta = next.valueOrNull;
+          if (prevMeta == null || nextMeta == null) return;
+          for (final entry in nextMeta.entries) {
+            final newTime = entry.value;
+            final oldTime = prevMeta[entry.key];
+            if (newTime == null) continue;
+            if (oldTime == null || newTime.isAfter(oldTime)) {
+              ref
+                  .read(notificationServiceProvider)
+                  .onNewMessage(channelId: entry.key);
+            }
+          }
+        },
+      );
     }
 
     return widget.child;

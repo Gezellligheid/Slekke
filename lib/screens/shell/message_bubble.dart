@@ -387,7 +387,12 @@ class _MessageActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final perms = ref.watch(currentUserOrgPermissionsProvider);
-    final canDelete = isOwn || perms.manageMessages;
+    final org = ref.watch(selectedOrgProvider);
+    final currentUid = ref.watch(currentUserProvider)?.uid;
+    final isOwner = org?.ownerId == currentUid;
+    final canModerate = isOwner || perms.manageMessages;
+    final canDelete = isOwn || canModerate;
+    final canPin = isOwn || canModerate;
 
     return Container(
       decoration: BoxDecoration(
@@ -410,6 +415,17 @@ class _MessageActions extends ConsumerWidget {
               ref.read(replyToMessageProvider.notifier).state = message;
             },
           ),
+          if (canPin)
+            _ActionBtn(
+              icon: message.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+              tooltip: message.isPinned ? 'Unpin' : 'Pin',
+              color: message.isPinned ? SlekkeColors.primary : null,
+              onTap: () => ref.read(firestoreServiceProvider).togglePinMessage(
+                    channelId: channelId,
+                    messageId: message.id,
+                    pin: !message.isPinned,
+                  ),
+            ),
           if (isOwn)
             _ActionBtn(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: onEdit),
           if (canDelete)
@@ -482,8 +498,14 @@ class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color? color;
 
-  const _ActionBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _ActionBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -494,7 +516,7 @@ class _ActionBtn extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: SlekkeColors.textSecondary),
+          child: Icon(icon, size: 18, color: color ?? SlekkeColors.textSecondary),
         ),
       ),
     );

@@ -6,8 +6,10 @@ import '../../models/user_status.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../core/widgets/context_menu.dart';
 import '../onboarding/create_or_join_screen.dart';
 import '../settings/settings_screen.dart';
+import 'notification_panel.dart';
 import 'org_settings_screen.dart';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -70,7 +72,13 @@ class OrgSwitcher extends ConsumerWidget {
           const Divider(height: 1, color: SlekkeColors.divider),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-            child: _UserAvatar(),
+            child: Row(
+              children: [
+                Expanded(child: _UserAvatar()),
+                const SizedBox(width: 4),
+                _BellButton(),
+              ],
+            ),
           ),
         ],
       ),
@@ -80,20 +88,23 @@ class OrgSwitcher extends ConsumerWidget {
 
 // ─── DM nav item ─────────────────────────────────────────────────────────────
 
-class _DmNavItem extends StatefulWidget {
+class _DmNavItem extends ConsumerStatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   const _DmNavItem({required this.selected, required this.onTap});
 
   @override
-  State<_DmNavItem> createState() => _DmNavItemState();
+  ConsumerState<_DmNavItem> createState() => _DmNavItemState();
 }
 
-class _DmNavItemState extends State<_DmNavItem> {
+class _DmNavItemState extends ConsumerState<_DmNavItem> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
+    final unreadDms = ref.watch(dmUnreadCountProvider);
+    final dmBadge = widget.selected ? 0 : unreadDms.clamp(0, 9);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -119,18 +130,21 @@ class _DmNavItemState extends State<_DmNavItem> {
                     : SlekkeColors.textMuted,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Direct Messages',
-                style: TextStyle(
-                  color: widget.selected
-                      ? SlekkeColors.textPrimary
-                      : SlekkeColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: widget.selected
-                      ? FontWeight.w600
-                      : FontWeight.normal,
+              Expanded(
+                child: Text(
+                  'Direct Messages',
+                  style: TextStyle(
+                    color: widget.selected
+                        ? SlekkeColors.textPrimary
+                        : SlekkeColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: widget.selected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
                 ),
               ),
+              if (dmBadge > 0) _UnreadBadge(count: dmBadge),
             ],
           ),
         ),
@@ -187,12 +201,113 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
     super.dispose();
   }
 
+  Future<void> _showOrgContextMenu(BuildContext context, Offset position) async {
+    final currentUid = ref.read(currentUserProvider)?.uid;
+    final isOwner = widget.org.ownerId == currentUid;
+    final perms = ref.read(currentUserOrgPermissionsProvider);
+    final canManage = isOwner || perms.manageRoles || perms.manageShells;
+
+    final items = <ContextMenuItem<String>>[
+      const ContextMenuItem(
+        value: 'mark_read',
+        icon: Icons.done_all,
+        label: 'Mark as read',
+      ),
+      if (canManage)
+        const ContextMenuItem(
+          value: 'settings',
+          icon: Icons.settings_outlined,
+          label: 'Settings',
+        ),
+      if (!isOwner)
+        const ContextMenuItem(
+          value: 'leave',
+          icon: Icons.exit_to_app,
+          label: 'Leave org',
+          color: SlekkeColors.danger,
+          dividerAbove: true,
+        ),
+    ];
+
+    final result = await showContextMenu<String>(
+      context: context,
+      position: position,
+      items: items,
+    );
+
+    if (!mounted) return;
+
+    switch (result) {
+      case 'mark_read':
+        _markOrgAsRead();
+      case 'settings':
+        showOrgSettingsDialog(context);
+      case 'leave':
+        _confirmLeave(context);
+    }
+  }
+
+  void _markOrgAsRead() {
+    final uid = ref.read(currentUserProvider)?.uid;
+    if (uid == null) return;
+    final channelIds = ref
+        .read(orgChannelMetaProvider(widget.org.id))
+        .valueOrNull
+        ?.keys
+        .toList() ?? [];
+    ref.read(firestoreServiceProvider).batchMarkRead(
+          uid: uid,
+          channelIds: channelIds,
+        );
+  }
+
+  Future<void> _confirmLeave(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SlekkeColors.surface,
+        title: const Text('Leave org',
+            style: TextStyle(color: SlekkeColors.textPrimary)),
+        content: Text(
+          'Are you sure you want to leave "${widget.org.name}"? You will need an invite to rejoin.',
+          style: const TextStyle(color: SlekkeColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel',
+                style: TextStyle(color: SlekkeColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Leave',
+                style: TextStyle(color: SlekkeColors.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final uid = ref.read(currentUserProvider)?.uid;
+    if (uid == null) return;
+    await ref.read(firestoreServiceProvider).leaveOrg(widget.org.id, uid);
+    if (!mounted) return;
+    // Clear selection if we left the selected org
+    if (ref.read(selectedOrgIdProvider) == widget.org.id) {
+      ref.read(selectedOrgIdProvider.notifier).state = null;
+      ref.read(selectedShellIdProvider.notifier).state = null;
+      ref.read(selectedChannelStateProvider.notifier).state = null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUid = ref.watch(currentUserProvider)?.uid;
     final isOwner = widget.org.ownerId == currentUid;
     final perms = ref.watch(currentUserOrgPermissionsProvider);
     final canManage = isOwner || perms.manageRoles || perms.manageShells;
+    final orgUnread = ref.watch(orgUnreadCountProvider(widget.org.id));
+    final orgBadge = widget.expanded ? 0 : orgUnread.clamp(0, 9);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,7 +317,12 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
           cursor: SystemMouseCursors.click,
-          child: GestureDetector(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (e) {
+              if (e.buttons == 2) _showOrgContextMenu(context, e.position);
+            },
+            child: GestureDetector(
             onTap: widget.onSelect,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 100),
@@ -242,6 +362,11 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (orgBadge > 0) ...[
+                    const SizedBox(width: 4),
+                    _UnreadBadge(count: orgBadge),
+                    const SizedBox(width: 4),
+                  ],
                   AnimatedOpacity(
                     opacity: (_hovered && canManage) ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 100),
@@ -255,6 +380,7 @@ class _OrgAccordionState extends ConsumerState<_OrgAccordion>
               ),
             ),
           ),
+          ), // Listener
         ),
         // Shells (shown when expanded)
         AnimatedSize(
@@ -292,6 +418,7 @@ class _ShellList extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ...shells.map((shell) => _ShellRow(
+                shellId: shell.id,
                 name: shell.name,
                 selected: shell.id == selectedShellId,
                 onTap: () {
@@ -389,23 +516,31 @@ class _ShellList extends ConsumerWidget {
   }
 }
 
-class _ShellRow extends StatefulWidget {
+class _ShellRow extends ConsumerStatefulWidget {
+  final String shellId;
   final String name;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ShellRow(
-      {required this.name, required this.selected, required this.onTap});
+  const _ShellRow({
+    required this.shellId,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
-  State<_ShellRow> createState() => _ShellRowState();
+  ConsumerState<_ShellRow> createState() => _ShellRowState();
 }
 
-class _ShellRowState extends State<_ShellRow> {
+class _ShellRowState extends ConsumerState<_ShellRow> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
+    final unread = ref.watch(shellUnreadCountProvider(widget.shellId));
+    final count = widget.selected ? 0 : unread.clamp(0, 9);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       child: InkWell(
@@ -455,8 +590,107 @@ class _ShellRowState extends State<_ShellRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (count > 0) _UnreadBadge(count: count),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Bell button ──────────────────────────────────────────────────────────────
+
+class _BellButton extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_BellButton> createState() => _BellButtonState();
+}
+
+class _BellButtonState extends ConsumerState<_BellButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final orgId = ref.watch(selectedOrgIdProvider);
+    final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+    final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
+
+    final unreadDmCount = dms.where((dm) {
+      final lastMsg = dm.lastMessageAt;
+      final lastRead = reads['dm_${dm.id}'];
+      return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+    }).length;
+
+    final channelNotifs = orgId != null
+        ? (ref.watch(orgChannelNotifsProvider(orgId)).valueOrNull ?? [])
+        : <ChannelNotifEntry>[];
+
+    final unreadChannelCount = channelNotifs.where((e) {
+      final lastRead = reads[e.channelId];
+      return lastRead == null || e.lastMessageAt.isAfter(lastRead);
+    }).length;
+
+    final totalUnread = (unreadDmCount + unreadChannelCount).clamp(0, 9);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () => showNotificationPanel(context, ref),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: _hovered ? SlekkeColors.elevated : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.notifications_none_outlined,
+                size: 18,
+                color:
+                    _hovered ? SlekkeColors.textPrimary : SlekkeColors.textMuted,
+              ),
+              if (totalUnread > 0)
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: _UnreadBadge(count: totalUnread),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+  const _UnreadBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: const BoxDecoration(
+        color: SlekkeColors.danger,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          height: 1,
         ),
       ),
     );

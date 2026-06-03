@@ -75,44 +75,13 @@ class _ShellSidebarBody extends ConsumerWidget {
           Expanded(
             child: selectedShellId == null
                 ? _OrgMembersPanel(orgId: orgId)
-                : _RightClickArea(
-                    enabled: canManageShells,
-                    onRightClick: (pos) =>
-                        _showContextMenu(context, ref, pos, orgId, selectedShellId!),
-                    child: _CategoryList(orgId: orgId, shellId: selectedShellId!),
-                  ),
+                : _CategoryList(orgId: orgId, shellId: selectedShellId!),
           ),
         ],
       ),
     );
   }
 
-  void _showContextMenu(BuildContext context, WidgetRef ref,
-      Offset position, String orgId, String shellId) async {
-    final result = await showContextMenu<String>(
-      context: context,
-      position: position,
-      items: const [
-        ContextMenuItem(
-          value: 'add_category',
-          icon: Icons.create_new_folder_outlined,
-          label: 'Add category',
-        ),
-      ],
-    );
-    if (!context.mounted) return;
-    if (result == 'add_category') {
-      final name = await _nameDialog(context, 'New Category', 'Category name');
-      if (name == null || name.isEmpty) return;
-      final cats = ref.read(categoriesProvider).valueOrNull ?? [];
-      await ref.read(firestoreServiceProvider).createCategory(
-        orgId: orgId,
-        shellId: shellId,
-        name: name,
-        position: cats.length,
-      );
-    }
-  }
 }
 
 // ─── Org members panel (shown when no shell selected) ─────────────────────────
@@ -314,6 +283,10 @@ class _CategoryList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(categoriesProvider);
+    final org = ref.watch(selectedOrgProvider);
+    final currentUid = ref.watch(currentUserProvider)?.uid;
+    final perms = ref.watch(currentUserOrgPermissionsProvider);
+    final canManage = org?.ownerId == currentUid || perms.manageShells;
 
     return categoriesAsync.when(
       loading: () => const Center(
@@ -321,17 +294,62 @@ class _CategoryList extends ConsumerWidget {
       ),
       error: (e, _) =>
           Center(child: Text('$e', style: const TextStyle(color: SlekkeColors.danger))),
-      data: (categories) => ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: categories
-            .map((cat) => _CategoryTile(
-                  category: cat,
-                  orgId: orgId,
-                  shellId: shellId,
-                ))
-            .toList(),
+      data: (categories) => CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate(
+                categories
+                    .map((cat) => _CategoryTile(
+                          category: cat,
+                          orgId: orgId,
+                          shellId: shellId,
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (e) {
+                if (e.buttons == 2 && canManage) {
+                  _showAddCategoryMenu(context, ref, e.position);
+                }
+              },
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _showAddCategoryMenu(
+      BuildContext context, WidgetRef ref, Offset position) async {
+    final result = await showContextMenu<String>(
+      context: context,
+      position: position,
+      items: const [
+        ContextMenuItem(
+          value: 'add_category',
+          icon: Icons.create_new_folder_outlined,
+          label: 'Add category',
+        ),
+      ],
+    );
+    if (!context.mounted || result != 'add_category') return;
+    final name = await _nameDialog(context, 'New Category', 'Category name');
+    if (name == null || name.isEmpty) return;
+    final cats = ref.read(categoriesProvider).valueOrNull ?? [];
+    await ref.read(firestoreServiceProvider).createCategory(
+          orgId: orgId,
+          shellId: shellId,
+          name: name,
+          position: cats.length,
+        );
   }
 }
 
@@ -455,6 +473,11 @@ class _CategoryTileState extends ConsumerState<_CategoryTile> {
           label: 'Add channel',
         ),
         const ContextMenuItem(
+          value: 'add_category',
+          icon: Icons.create_new_folder_outlined,
+          label: 'Add category',
+        ),
+        const ContextMenuItem(
           value: 'rename',
           icon: Icons.edit_outlined,
           label: 'Rename',
@@ -469,32 +492,44 @@ class _CategoryTileState extends ConsumerState<_CategoryTile> {
       ],
     );
     if (!context.mounted) return;
-    if (result == 'add_channel') {
-      final name =
-          await _nameDialog(context, 'New Channel', 'Channel name (no #)');
-      if (name == null || name.isEmpty) return;
-      final ch = await ref.read(firestoreServiceProvider).createChannel(
-            orgId: widget.orgId,
-            shellId: widget.shellId,
-            categoryId: widget.category.id,
-            name: name.toLowerCase().replaceAll(' ', '-'),
-          );
-      ref.read(selectedChannelStateProvider.notifier).state = ch;
-    } else if (result == 'rename') {
-      final name = await _nameDialog(context, 'Rename Category', 'New name');
-      if (name == null || name.isEmpty) return;
-      await ref.read(firestoreServiceProvider).updateCategory(
-            orgId: widget.orgId,
-            shellId: widget.shellId,
-            categoryId: widget.category.id,
-            name: name,
-          );
-    } else if (result == 'delete') {
-      await ref.read(firestoreServiceProvider).deleteCategory(
-            orgId: widget.orgId,
-            shellId: widget.shellId,
-            categoryId: widget.category.id,
-          );
+    switch (result) {
+      case 'add_channel':
+        final chName =
+            await _nameDialog(context, 'New Channel', 'Channel name (no #)');
+        if (chName == null || chName.isEmpty) return;
+        final ch = await ref.read(firestoreServiceProvider).createChannel(
+              orgId: widget.orgId,
+              shellId: widget.shellId,
+              categoryId: widget.category.id,
+              name: chName.toLowerCase().replaceAll(' ', '-'),
+            );
+        ref.read(selectedChannelStateProvider.notifier).state = ch;
+      case 'add_category':
+        final catName =
+            await _nameDialog(context, 'New Category', 'Category name');
+        if (catName == null || catName.isEmpty) return;
+        final cats = ref.read(categoriesProvider).valueOrNull ?? [];
+        await ref.read(firestoreServiceProvider).createCategory(
+              orgId: widget.orgId,
+              shellId: widget.shellId,
+              name: catName,
+              position: cats.length,
+            );
+      case 'rename':
+        final name = await _nameDialog(context, 'Rename Category', 'New name');
+        if (name == null || name.isEmpty) return;
+        await ref.read(firestoreServiceProvider).updateCategory(
+              orgId: widget.orgId,
+              shellId: widget.shellId,
+              categoryId: widget.category.id,
+              name: name,
+            );
+      case 'delete':
+        await ref.read(firestoreServiceProvider).deleteCategory(
+              orgId: widget.orgId,
+              shellId: widget.shellId,
+              categoryId: widget.category.id,
+            );
     }
   }
 }
@@ -518,16 +553,28 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
     final selectedChannel = ref.watch(selectedChannelProvider);
     final isSelected = selectedChannel?.id == widget.channel.id;
     final compact = ref.watch(settingsProvider.select((s) => s.compactSidebar));
+    final lastMessageAt = ref
+        .watch(channelLastMessageAtProvider(widget.channel.id))
+        .valueOrNull;
+    final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+    final lastReadAt = reads[widget.channel.id];
+    final hasUnread = !isSelected &&
+        lastMessageAt != null &&
+        (lastReadAt == null || lastMessageAt.isAfter(lastReadAt));
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: _RightClickArea(
-        enabled: widget.canManage,
+        enabled: true,
         onRightClick: (pos) => _showChannelSettings(context, ref, pos),
         child: GestureDetector(
           onTap: () {
             ref.read(selectedChannelStateProvider.notifier).state = widget.channel;
+            final uid = ref.read(currentUserProvider)?.uid;
+            if (uid != null) {
+              ref.read(firestoreServiceProvider).markChannelRead(uid, widget.channel.id);
+            }
           },
           child: Container(
           height: compact ? 28 : 34,
@@ -548,7 +595,7 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
                     ? Icons.volume_up
                     : Icons.tag,
                 size: 18,
-                color: isSelected
+                color: isSelected || hasUnread
                     ? SlekkeColors.textPrimary
                     : SlekkeColors.textMuted,
               ),
@@ -557,16 +604,26 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
                 child: Text(
                   widget.channel.name,
                   style: TextStyle(
-                    color: isSelected
+                    color: isSelected || hasUnread
                         ? SlekkeColors.textPrimary
                         : SlekkeColors.textSecondary,
                     fontSize: 14,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected || hasUnread
+                        ? FontWeight.w700
+                        : FontWeight.normal,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (hasUnread)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: SlekkeColors.textPrimary,
+                  ),
+                ),
             ],
           ),
         ),
@@ -577,45 +634,99 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
 
   void _showChannelSettings(
       BuildContext context, WidgetRef ref, Offset position) async {
-    final result = await showContextMenu<String>(
-      context: context,
-      position: position,
-      items: [
+    final isOwner = ref.read(selectedOrgProvider)?.ownerId ==
+        ref.read(currentUserProvider)?.uid;
+    final perms = ref.read(currentUserOrgPermissionsProvider);
+    final canManage = isOwner || perms.manageShells;
+
+    final items = <ContextMenuItem<String>>[
+      const ContextMenuItem(
+        value: 'mark_read',
+        icon: Icons.done_all,
+        label: 'Mark as read',
+      ),
+      if (canManage) ...[
+        const ContextMenuItem(
+          value: 'add_channel',
+          icon: Icons.tag,
+          label: 'Add channel here',
+          dividerAbove: true,
+        ),
+        const ContextMenuItem(
+          value: 'add_category',
+          icon: Icons.create_new_folder_outlined,
+          label: 'Add category',
+        ),
         const ContextMenuItem(
           value: 'rename',
           icon: Icons.edit_outlined,
           label: 'Rename',
+          dividerAbove: true,
         ),
-        ContextMenuItem(
+        const ContextMenuItem(
           value: 'delete',
           icon: Icons.delete_outline,
           label: 'Delete channel',
           color: SlekkeColors.danger,
-          dividerAbove: true,
         ),
       ],
+    ];
+
+    final result = await showContextMenu<String>(
+      context: context,
+      position: position,
+      items: items,
     );
     if (!context.mounted) return;
-    if (result == 'rename') {
-      final name = await _nameDialog(context, 'Rename Channel', 'New name');
-      if (name == null || name.isEmpty) return;
-      await ref.read(firestoreServiceProvider).updateChannel(
-            orgId: widget.channel.organizationId,
-            shellId: widget.channel.shellId,
-            categoryId: widget.channel.categoryId,
-            channelId: widget.channel.id,
-            name: name.toLowerCase().replaceAll(' ', '-'),
-          );
-    } else if (result == 'delete') {
-      if (ref.read(selectedChannelProvider)?.id == widget.channel.id) {
-        ref.read(selectedChannelStateProvider.notifier).state = null;
-      }
-      await ref.read(firestoreServiceProvider).deleteChannel(
-            orgId: widget.channel.organizationId,
-            shellId: widget.channel.shellId,
-            categoryId: widget.channel.categoryId,
-            channelId: widget.channel.id,
-          );
+
+    switch (result) {
+      case 'mark_read':
+        final uid = ref.read(currentUserProvider)?.uid;
+        if (uid != null) {
+          ref.read(firestoreServiceProvider).markChannelRead(uid, widget.channel.id);
+        }
+      case 'add_channel':
+        final chName =
+            await _nameDialog(context, 'New Channel', 'Channel name (no #)');
+        if (chName == null || chName.isEmpty) return;
+        final ch = await ref.read(firestoreServiceProvider).createChannel(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              categoryId: widget.channel.categoryId,
+              name: chName.toLowerCase().replaceAll(' ', '-'),
+            );
+        ref.read(selectedChannelStateProvider.notifier).state = ch;
+      case 'add_category':
+        final catName =
+            await _nameDialog(context, 'New Category', 'Category name');
+        if (catName == null || catName.isEmpty) return;
+        final cats = ref.read(categoriesProvider).valueOrNull ?? [];
+        await ref.read(firestoreServiceProvider).createCategory(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              name: catName,
+              position: cats.length,
+            );
+      case 'rename':
+        final name = await _nameDialog(context, 'Rename Channel', 'New name');
+        if (name == null || name.isEmpty) return;
+        await ref.read(firestoreServiceProvider).updateChannel(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              categoryId: widget.channel.categoryId,
+              channelId: widget.channel.id,
+              name: name.toLowerCase().replaceAll(' ', '-'),
+            );
+      case 'delete':
+        if (ref.read(selectedChannelProvider)?.id == widget.channel.id) {
+          ref.read(selectedChannelStateProvider.notifier).state = null;
+        }
+        await ref.read(firestoreServiceProvider).deleteChannel(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              categoryId: widget.channel.categoryId,
+              channelId: widget.channel.id,
+            );
     }
   }
 }

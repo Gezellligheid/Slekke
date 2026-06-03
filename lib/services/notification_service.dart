@@ -25,8 +25,18 @@ class NotificationService with WidgetsBindingObserver {
 
   void onNewMessage({required String channelId, bool isDm = false}) {
     final settings = _ref.read(settingsProvider);
-    if (!settings.notificationsEnabled || !settings.notifySoundEnabled) return;
 
+    // Master toggle gates everything
+    if (!settings.notificationsEnabled) return;
+
+    // Type-specific toggles
+    if (isDm && !settings.notifyDirectMessages) return;
+    if (!isDm && !settings.notifyAllChannelMessages) return;
+
+    // Sound toggle — badges still show regardless, only sound is gated here
+    if (!settings.notifySoundEnabled) return;
+
+    // Don't sound if the user is already looking at that conversation
     if (_appFocused) {
       final selectedChannel = _ref.read(selectedChannelProvider);
       final selectedDmId = _ref.read(selectedDmIdProvider);

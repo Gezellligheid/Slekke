@@ -49,6 +49,10 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
           _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
         }
       });
+      final uid = ref.read(currentUserProvider)?.uid;
+      if (uid != null) {
+        ref.read(firestoreServiceProvider).markDmRead(uid, widget.dm.id);
+      }
     });
 
     return Container(

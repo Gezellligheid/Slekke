@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
+export '../services/firestore_service.dart' show ChannelNotifEntry;
 import '../models/dm_model.dart';
 import '../models/org_role_model.dart';
 import '../models/organization_model.dart';
@@ -98,16 +100,69 @@ final selectedChannelProvider = Provider<ChannelModel?>((ref) {
   return ref.watch(selectedChannelStateProvider);
 });
 
+// ── Unread tracking ───────────────────────────────────────────────────────────
+
+final channelLastMessageAtProvider =
+    StreamProvider.family<DateTime?, String>((ref, channelId) {
+  return ref
+      .watch(firestoreServiceProvider)
+      .watchChannelLastMessageAt(channelId);
+});
+
+final userReadsProvider = StreamProvider<Map<String, DateTime>>((ref) {
+  final uid = ref.watch(currentUserProvider)?.uid;
+  if (uid == null) return const Stream.empty();
+  return ref.watch(firestoreServiceProvider).watchUserReads(uid);
+});
+
+final shellChannelMetaProvider =
+    StreamProvider.family<Map<String, DateTime?>, String>((ref, shellId) {
+  return ref.watch(firestoreServiceProvider).watchShellChannelMeta(shellId);
+});
+
+final orgChannelMetaProvider =
+    StreamProvider.family<Map<String, DateTime?>, String>((ref, orgId) {
+  return ref.watch(firestoreServiceProvider).watchOrgChannelMeta(orgId);
+});
+
+int _countUnread(Map<String, DateTime?> meta, Map<String, DateTime> reads) =>
+    meta.entries.where((e) {
+      final lastMsg = e.value;
+      final lastRead = reads[e.key];
+      return lastMsg != null &&
+          (lastRead == null || lastMsg.isAfter(lastRead));
+    }).length;
+
+final shellUnreadCountProvider = Provider.family<int, String>((ref, shellId) {
+  final meta = ref.watch(shellChannelMetaProvider(shellId)).valueOrNull ?? {};
+  final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+  return _countUnread(meta, reads);
+});
+
+final orgUnreadCountProvider = Provider.family<int, String>((ref, orgId) {
+  final meta = ref.watch(orgChannelMetaProvider(orgId)).valueOrNull ?? {};
+  final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+  return _countUnread(meta, reads);
+});
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 
-final messagesProvider = StreamProvider.family<List<MessageModel>, String>(
-  (ref, channelId) {
-    return ref.watch(firestoreServiceProvider).watchMessages(channelId);
-  },
-);
+// autoDispose so unused channels don't accumulate streams forever;
+// keepAlive for 3 min so switching channels doesn't re-fetch immediately.
+final messagesProvider = StreamProvider.autoDispose
+    .family<List<MessageModel>, String>((ref, channelId) {
+  final link = ref.keepAlive();
+  Timer(const Duration(minutes: 3), link.close);
+  return ref.watch(firestoreServiceProvider).watchMessages(channelId);
+});
 
 // Reply-to state
 final replyToMessageProvider = StateProvider<MessageModel?>((ref) => null);
+
+final pinnedMessagesProvider =
+    StreamProvider.family<List<MessageModel>, String>((ref, channelId) {
+  return ref.watch(firestoreServiceProvider).watchPinnedMessages(channelId);
+});
 
 // ── Direct Messages ───────────────────────────────────────────────────────────
 
@@ -118,6 +173,23 @@ final userDmsProvider = StreamProvider<List<DmModel>>((ref) {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const Stream.empty();
   return ref.watch(firestoreServiceProvider).watchUserDms(user.uid);
+});
+
+final orgChannelNotifsProvider =
+    StreamProvider.family<List<ChannelNotifEntry>, String>((ref, orgId) {
+  return ref
+      .watch(firestoreServiceProvider)
+      .watchOrgChannelNotifications(orgId);
+});
+
+final dmUnreadCountProvider = Provider<int>((ref) {
+  final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
+  final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+  return dms.where((dm) {
+    final lastMsg = dm.lastMessageAt;
+    final lastRead = reads['dm_${dm.id}'];
+    return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
+  }).length;
 });
 
 // ── Org Roles & Permissions ───────────────────────────────────────────────────

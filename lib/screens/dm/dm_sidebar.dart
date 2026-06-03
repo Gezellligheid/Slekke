@@ -114,6 +114,11 @@ class _DmTileState extends ConsumerState<_DmTile> {
   Widget build(BuildContext context) {
     final myUid = ref.watch(currentUserProvider)?.uid ?? '';
     final other = widget.dm.other(myUid);
+    final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
+    final lastReadAt = reads['dm_${widget.dm.id}'];
+    final hasUnread = !widget.selected &&
+        widget.dm.lastMessageAt != null &&
+        (lastReadAt == null || widget.dm.lastMessageAt!.isAfter(lastReadAt));
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -169,12 +174,12 @@ class _DmTileState extends ConsumerState<_DmTile> {
                     Text(
                       other.displayName,
                       style: TextStyle(
-                        color: widget.selected
+                        color: widget.selected || hasUnread
                             ? SlekkeColors.textPrimary
                             : SlekkeColors.textSecondary,
                         fontSize: 13,
-                        fontWeight: widget.selected
-                            ? FontWeight.w600
+                        fontWeight: widget.selected || hasUnread
+                            ? FontWeight.w700
                             : FontWeight.normal,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -191,7 +196,16 @@ class _DmTileState extends ConsumerState<_DmTile> {
                   ],
                 ),
               ),
-              if (widget.dm.lastMessageAt != null)
+              if (hasUnread)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: SlekkeColors.primary,
+                  ),
+                )
+              else if (widget.dm.lastMessageAt != null)
                 Text(
                   timeago.format(widget.dm.lastMessageAt!,
                       locale: 'en_short'),

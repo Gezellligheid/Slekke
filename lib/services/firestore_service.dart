@@ -10,6 +10,26 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../models/user_status.dart';
 
+class ChannelNotifEntry {
+  final String channelId;
+  final String channelName;
+  final String shellName;
+  final String shellId;
+  final String categoryId;
+  final String orgId;
+  final DateTime lastMessageAt;
+
+  const ChannelNotifEntry({
+    required this.channelId,
+    required this.channelName,
+    required this.shellName,
+    required this.shellId,
+    required this.categoryId,
+    required this.orgId,
+    required this.lastMessageAt,
+  });
+}
+
 class FirestoreService {
   final _db = FirebaseFirestore.instance;
   final _uuid = const Uuid();
@@ -35,6 +55,125 @@ class FirestoreService {
     if (photoUrl != null) data['photoUrl'] = photoUrl;
     if (data.isEmpty) return Future.value();
     return _db.collection('users').doc(uid).update(data);
+  }
+
+  // ── Unread tracking ──────────────────────────────────────────────────────────
+
+  Stream<DateTime?> watchChannelLastMessageAt(String channelId) => _db
+      .collection('channels')
+      .doc(channelId)
+      .snapshots()
+      .map((doc) =>
+          (doc.data()?['lastMessageAt'] as Timestamp?)?.toDate());
+
+  Stream<Map<String, DateTime>> watchUserReads(String uid) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('reads')
+      .snapshots()
+      .map((snap) => {
+            for (final doc in snap.docs)
+              doc.id: (doc.data()['lastReadAt'] as Timestamp?)?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+          });
+
+  Future<void> markChannelRead(String uid, String channelId) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('reads')
+      .doc(channelId)
+      .set({'lastReadAt': Timestamp.fromDate(DateTime.now())});
+
+  Future<void> markDmRead(String uid, String dmId) => _db
+      .collection('users')
+      .doc(uid)
+      .collection('reads')
+      .doc('dm_$dmId')
+      .set({'lastReadAt': Timestamp.fromDate(DateTime.now())});
+
+  Future<void> batchMarkRead({
+    required String uid,
+    List<String> channelIds = const [],
+    List<String> dmIds = const [],
+  }) async {
+    if (channelIds.isEmpty && dmIds.isEmpty) return;
+    final batch = _db.batch();
+    final now = Timestamp.fromDate(DateTime.now());
+    final readsRef = _db.collection('users').doc(uid).collection('reads');
+    for (final id in channelIds) {
+      batch.set(readsRef.doc(id), {'lastReadAt': now});
+    }
+    for (final dmId in dmIds) {
+      batch.set(readsRef.doc('dm_$dmId'), {'lastReadAt': now});
+    }
+    await batch.commit();
+  }
+
+  Stream<Map<String, DateTime?>> watchShellChannelMeta(String shellId) => _db
+      .collection('channels')
+      .where('shellId', isEqualTo: shellId)
+      .snapshots()
+      .map((s) => {
+            for (final d in s.docs)
+              d.id: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
+          });
+
+  Stream<Map<String, DateTime?>> watchOrgChannelMeta(String orgId) => _db
+      .collection('channels')
+      .where('orgId', isEqualTo: orgId)
+      .snapshots()
+      .map((s) => {
+            for (final d in s.docs)
+              d.id: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
+          });
+
+  Stream<List<ChannelNotifEntry>> watchOrgChannelNotifications(String orgId) =>
+      _db
+          .collection('channels')
+          .where('orgId', isEqualTo: orgId)
+          .orderBy('lastMessageAt', descending: true)
+          .snapshots()
+          .map((s) => s.docs
+              .map((d) {
+                final data = d.data();
+                final ts =
+                    (data['lastMessageAt'] as Timestamp?)?.toDate();
+                if (ts == null) return null;
+                return ChannelNotifEntry(
+                  channelId: d.id,
+                  channelName: data['channelName'] as String? ?? '',
+                  shellName: data['shellName'] as String? ?? '',
+                  shellId: data['shellId'] as String? ?? '',
+                  categoryId: data['categoryId'] as String? ?? '',
+                  orgId: orgId,
+                  lastMessageAt: ts,
+                );
+              })
+              .whereType<ChannelNotifEntry>()
+              .toList());
+
+  Future<ChannelModel?> getChannelById({
+    required String orgId,
+    required String shellId,
+    required String categoryId,
+    required String channelId,
+  }) async {
+    try {
+      final doc = await _db
+          .collection('organizations')
+          .doc(orgId)
+          .collection('shells')
+          .doc(shellId)
+          .collection('categories')
+          .doc(categoryId)
+          .collection('channels')
+          .doc(channelId)
+          .get();
+      if (!doc.exists) return null;
+      return ChannelModel.fromDoc(doc, categoryId, shellId, orgId);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── Organizations ──────────────────────────────────────────────────────────
@@ -244,6 +383,16 @@ class FirestoreService {
     final updated = await doc.reference.get();
     return OrganizationModel.fromDoc(updated);
   }
+
+  Future<void> leaveOrg(String orgId, String userId) => _db
+      .collection('organizations')
+      .doc(orgId)
+      .update({
+        'memberIds': FieldValue.arrayRemove([userId]),
+        'members': FieldValue.arrayRemove([
+          {'userId': userId, 'role': 'member'},
+        ]),
+      });
 
   // ── Shells ─────────────────────────────────────────────────────────────────
 
@@ -571,12 +720,12 @@ class FirestoreService {
 
   Future<List<MessageModel>> loadMoreMessages(
     String channelId, {
-    required DocumentSnapshot lastDoc,
-    int limit = 50,
+    required DateTime before,
+    int limit = 30,
   }) async {
     final snap = await _messages(channelId)
         .orderBy('timestamp', descending: true)
-        .startAfterDocument(lastDoc)
+        .where('timestamp', isLessThan: Timestamp.fromDate(before))
         .limit(limit)
         .get();
     return snap.docs
@@ -600,29 +749,66 @@ class FirestoreService {
     required String authorId,
     required String authorName,
     String? authorPhotoUrl,
+    String? shellId,
+    String? orgId,
+    String? channelName,
+    String? shellName,
+    String? categoryId,
     String? replyToId,
     String? replyToContent,
     String? replyToAuthorName,
     String? replyToAuthorId,
     List<String> imageUrls = const [],
   }) async {
-    await _messages(channelId).add({
-      'channelId': channelId,
-      'content': content,
-      'authorId': authorId,
-      'authorName': authorName,
-      'authorPhotoUrl': authorPhotoUrl,
-      'timestamp': FieldValue.serverTimestamp(),
-      'reactions': [],
-      'replyToId': replyToId,
-      'replyToContent': replyToContent,
-      'replyToAuthorName': replyToAuthorName,
-      'replyToAuthorId': replyToAuthorId,
-      'imageUrls': imageUrls,
-      'isEdited': false,
-      'editedAt': null,
-    });
+    final meta = <String, dynamic>{
+      'lastMessageAt': FieldValue.serverTimestamp(),
+    };
+    if (shellId != null) meta['shellId'] = shellId;
+    if (orgId != null) meta['orgId'] = orgId;
+    if (channelName != null) meta['channelName'] = channelName;
+    if (shellName != null) meta['shellName'] = shellName;
+    if (categoryId != null) meta['categoryId'] = categoryId;
+
+    await Future.wait([
+      _messages(channelId).add({
+        'channelId': channelId,
+        'content': content,
+        'authorId': authorId,
+        'authorName': authorName,
+        'authorPhotoUrl': authorPhotoUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+        'reactions': [],
+        'replyToId': replyToId,
+        'replyToContent': replyToContent,
+        'replyToAuthorName': replyToAuthorName,
+        'replyToAuthorId': replyToAuthorId,
+        'imageUrls': imageUrls,
+        'isEdited': false,
+        'editedAt': null,
+      }),
+      _db.collection('channels').doc(channelId).set(meta, SetOptions(merge: true)),
+    ]);
   }
+
+  Future<void> togglePinMessage({
+    required String channelId,
+    required String messageId,
+    required bool pin,
+  }) =>
+      _messages(channelId)
+          .doc(messageId)
+          .update({'isPinned': pin});
+
+  Stream<List<MessageModel>> watchPinnedMessages(String channelId) =>
+      _messages(channelId)
+          .where('isPinned', isEqualTo: true)
+          .snapshots()
+          .handleError((dynamic _) {})
+          .map((s) {
+            final msgs = s.docs.map((d) => MessageModel.fromDoc(d)).toList();
+            msgs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            return msgs;
+          });
 
   Future<void> editMessage({
     required String channelId,
