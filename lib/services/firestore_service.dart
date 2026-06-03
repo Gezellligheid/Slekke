@@ -353,6 +353,15 @@ class FirestoreService {
     return results;
   }
 
+  Future<void> updateOrgName({
+    required String orgId,
+    required String name,
+  }) =>
+      _db.collection('organizations').doc(orgId).update({'name': name});
+
+  Future<void> deleteOrg(String orgId) =>
+      _db.collection('organizations').doc(orgId).delete();
+
   Future<String> regenerateInviteToken(String orgId) async {
     final token = _uuid.v4().substring(0, 8).toUpperCase();
     await _db.collection('organizations').doc(orgId).update({'inviteToken': token});
@@ -435,6 +444,29 @@ class FirestoreService {
     final doc = await ref.get();
     return ShellModel.fromDoc(doc, orgId);
   }
+
+  Future<void> updateShell({
+    required String orgId,
+    required String shellId,
+    required String name,
+  }) =>
+      _db
+          .collection('organizations')
+          .doc(orgId)
+          .collection('shells')
+          .doc(shellId)
+          .update({'name': name});
+
+  Future<void> deleteShell({
+    required String orgId,
+    required String shellId,
+  }) =>
+      _db
+          .collection('organizations')
+          .doc(orgId)
+          .collection('shells')
+          .doc(shellId)
+          .delete();
 
   // ── Categories ─────────────────────────────────────────────────────────────
 

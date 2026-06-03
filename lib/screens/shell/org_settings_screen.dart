@@ -354,6 +354,37 @@ class _RoleRow extends ConsumerWidget {
                 tooltip: 'Delete',
                 color: SlekkeColors.danger,
                 onTap: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: SlekkeColors.surface,
+                      title: const Text('Delete role',
+                          style: TextStyle(
+                              color: SlekkeColors.textPrimary,
+                              fontSize: 15)),
+                      content: Text(
+                        'Delete "${role.name}"? Members with this role will lose its permissions.',
+                        style: const TextStyle(
+                            color: SlekkeColors.textSecondary,
+                            fontSize: 13),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Cancel',
+                              style: TextStyle(
+                                  color: SlekkeColors.textMuted)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Delete',
+                              style: TextStyle(
+                                  color: SlekkeColors.danger)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
                   await ref
                       .read(firestoreServiceProvider)
                       .deleteOrgRole(orgId: orgId, roleId: role.id);

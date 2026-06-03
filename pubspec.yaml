@@ -1,6 +1,6 @@
 name: slekke
 description: "Slekke — internal communication tool, Slack/Discord clone."
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -59,12 +59,12 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
 
 flutter_launcher_icons:
-  image_path: "assets/images/Slekke logo.png"
+  image_path: "assets/images/slekke.png"
   android: true
   ios: true
   windows:
     generate: true
-    image_path: "assets/images/Slekke logo.png"
+    image_path: "assets/images/slekke.png"
     icon_size: 48
   macos:
     generate: true
