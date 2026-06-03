@@ -199,7 +199,10 @@ final dmUnreadCountProvider = Provider<int>((ref) {
   return dms.where((dm) {
     if (dmMode && dm.id == activeDmId) return false; // currently viewing
     if (dm.lastMessageAuthorId != null && dm.lastMessageAuthorId == myUid) return false; // own message
-    return _isUnread(dm.lastMessageAt, reads['dm_${dm.id}']);
+    // Fall back to channels/{id} timestamp for DMs that predate updateDmLastMessage
+    final channelAt = ref.watch(channelLastMessageAtProvider(dm.id)).valueOrNull;
+    final effectiveAt = dm.lastMessageAt ?? channelAt;
+    return _isUnread(effectiveAt, reads['dm_${dm.id}']);
   }).length;
 });
 
