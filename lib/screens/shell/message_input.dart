@@ -154,6 +154,14 @@ class _MessageInputState extends ConsumerState<MessageInput> {
         imageUrls: imageUrls,
       );
 
+      // Post-send mark-as-read: guarantees lastReadAt ≥ lastMessageAt
+      // even if the pre-send mark lost the server-timestamp race.
+      if (isDm) {
+        svc.markDmRead(user.uid, widget.channelId);
+      } else {
+        svc.markChannelRead(user.uid, widget.channelId);
+      }
+
       _ctrl.clear();
       setState(() => _attachments = []);
       ref.read(replyToMessageProvider.notifier).state = null;

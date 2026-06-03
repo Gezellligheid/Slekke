@@ -612,24 +612,10 @@ class _BellButtonState extends ConsumerState<_BellButton> {
   @override
   Widget build(BuildContext context) {
     final orgId = ref.watch(selectedOrgIdProvider);
-    final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
-    final dms = ref.watch(userDmsProvider).valueOrNull ?? [];
-
-    final unreadDmCount = dms.where((dm) {
-      final lastMsg = dm.lastMessageAt;
-      final lastRead = reads['dm_${dm.id}'];
-      return lastMsg != null && (lastRead == null || lastMsg.isAfter(lastRead));
-    }).length;
-
-    final channelNotifs = orgId != null
-        ? (ref.watch(orgChannelNotifsProvider(orgId)).valueOrNull ?? [])
-        : <ChannelNotifEntry>[];
-
-    final unreadChannelCount = channelNotifs.where((e) {
-      final lastRead = reads[e.channelId];
-      return lastRead == null || e.lastMessageAt.isAfter(lastRead);
-    }).length;
-
+    final unreadDmCount = ref.watch(dmUnreadCountProvider);
+    final unreadChannelCount = orgId != null
+        ? ref.watch(orgUnreadCountProvider(orgId))
+        : 0;
     final totalUnread = (unreadDmCount + unreadChannelCount).clamp(0, 9);
 
     return MouseRegion(
