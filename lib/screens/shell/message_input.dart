@@ -40,6 +40,9 @@ class _MessageInputState extends ConsumerState<MessageInput> {
   void didUpdateWidget(MessageInput old) {
     super.didUpdateWidget(old);
     if (old.channelId != widget.channelId) {
+      // Clear the typing indicator on the OLD channel immediately —
+      // dispose() won't be called when the channel prop just changes.
+      _stopTyping(old.channelId);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusNode.requestFocus();
       });
@@ -78,14 +81,14 @@ class _MessageInputState extends ConsumerState<MessageInput> {
     );
   }
 
-  void _stopTyping() {
+  void _stopTyping([String? channelId]) {
     if (!_isTyping) return;
     _isTyping = false;
     _typingTimer?.cancel();
     final user = ref.read(currentUserProvider);
     if (user == null) return;
     ref.read(firestoreServiceProvider).clearTyping(
-      channelId: widget.channelId,
+      channelId: channelId ?? widget.channelId,
       userId: user.uid,
     );
   }

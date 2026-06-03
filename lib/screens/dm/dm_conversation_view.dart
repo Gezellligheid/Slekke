@@ -51,16 +51,20 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
     final other = widget.dm.other(myUid);
     final messagesAsync = ref.watch(messagesProvider(widget.dm.id));
     final replyTo = ref.watch(replyToMessageProvider);
+    // Capture before ref.listen so the closure holds plain values —
+    // calling ref.read inside the callback crashes when the widget is
+    // deactivated mid-stream-event.
+    final svc = ref.read(firestoreServiceProvider);
+    final dmId = widget.dm.id;
 
-    ref.listen(messagesProvider(widget.dm.id), (prev, _) {
+    ref.listen(messagesProvider(dmId), (prev, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_atBottom && _scrollCtrl.hasClients) {
           _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
         }
       });
-      final uid = ref.read(currentUserProvider)?.uid;
-      if (uid != null) {
-        ref.read(firestoreServiceProvider).markDmRead(uid, widget.dm.id);
+      if (myUid.isNotEmpty) {
+        svc.markDmRead(myUid, dmId);
       }
     });
 

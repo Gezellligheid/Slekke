@@ -66,20 +66,24 @@ class _DmNotificationWatcherState
 
       for (final dm in dms) {
         final prevTime = _lastDmTimes[dm.id];
-        _lastDmTimes[dm.id] = dm.lastMessageAt;
         final newTime = dm.lastMessageAt;
-        if (newTime == null || prevTime == null) continue;
-        if (newTime.isAfter(prevTime)) {
-          final sentByMe = dm.lastMessageAuthorId != null &&
-              dm.lastMessageAuthorId == ref.read(currentUserProvider)?.uid;
-          if (!sentByMe) {
-            ref.read(notificationServiceProvider).onNewMessage(
-                  channelId: dm.id,
-                  isDm: true,
-                );
-          }
-          break; // one sound per batch update
-        }
+        _lastDmTimes[dm.id] = newTime;
+
+        if (newTime == null) continue;
+
+        final sentByMe = dm.lastMessageAuthorId != null &&
+            dm.lastMessageAuthorId == ref.read(currentUserProvider)?.uid;
+        if (sentByMe) continue;
+
+        // New DM conversation not yet tracked → treat as new message
+        // Existing DM → only notify if lastMessageAt actually advanced
+        if (prevTime != null && !newTime.isAfter(prevTime)) continue;
+
+        ref.read(notificationServiceProvider).onNewMessage(
+              channelId: dm.id,
+              isDm: true,
+            );
+        break; // one sound per batch update
       }
     });
 
