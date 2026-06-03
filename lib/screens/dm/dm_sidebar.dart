@@ -1,0 +1,207 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import '../../core/theme/app_theme.dart';
+import '../../models/dm_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/firestore_provider.dart';
+import 'new_dm_dialog.dart';
+
+class DmSidebar extends ConsumerWidget {
+  const DmSidebar({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dmsAsync = ref.watch(userDmsProvider);
+    final selectedDmId = ref.watch(selectedDmIdProvider);
+
+    return Container(
+      width: 240,
+      color: SlekkeColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 44,
+            padding: const EdgeInsets.only(left: 14, right: 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Direct Messages',
+                    style: TextStyle(
+                      color: SlekkeColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Tooltip(
+                  message: 'New message',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: () => showNewDmDialog(context),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.edit_outlined,
+                          size: 16, color: SlekkeColors.textMuted),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: SlekkeColors.divider),
+          Expanded(
+            child: dmsAsync.when(
+              loading: () => const Center(
+                  child: CircularProgressIndicator(
+                      color: SlekkeColors.primary)),
+              error: (e, _) => Center(
+                  child: Text('$e',
+                      style:
+                          const TextStyle(color: SlekkeColors.danger))),
+              data: (dms) {
+                if (dms.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No conversations yet',
+                      style: TextStyle(
+                          color: SlekkeColors.textMuted, fontSize: 12),
+                    ),
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: dms
+                      .map((dm) => _DmTile(
+                            dm: dm,
+                            selected: dm.id == selectedDmId,
+                            onTap: () {
+                              ref
+                                  .read(selectedDmIdProvider.notifier)
+                                  .state = dm.id;
+                            },
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DmTile extends ConsumerStatefulWidget {
+  final DmModel dm;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DmTile(
+      {required this.dm, required this.selected, required this.onTap});
+
+  @override
+  ConsumerState<_DmTile> createState() => _DmTileState();
+}
+
+class _DmTileState extends ConsumerState<_DmTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final myUid = ref.watch(currentUserProvider)?.uid ?? '';
+    final other = widget.dm.other(myUid);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          height: 52,
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? SlekkeColors.channelSelected
+                : _hovered
+                    ? SlekkeColors.elevated.withAlpha(80)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: SlekkeColors.elevated,
+                  image: other.photoUrl != null
+                      ? DecorationImage(
+                          image: NetworkImage(other.photoUrl!),
+                          fit: BoxFit.cover)
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: other.photoUrl == null
+                    ? Text(
+                        other.displayName.isNotEmpty
+                            ? other.displayName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                            color: SlekkeColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14))
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      other.displayName,
+                      style: TextStyle(
+                        color: widget.selected
+                            ? SlekkeColors.textPrimary
+                            : SlekkeColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: widget.selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (widget.dm.lastMessage != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.dm.lastMessage!,
+                        style: const TextStyle(
+                            color: SlekkeColors.textMuted, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (widget.dm.lastMessageAt != null)
+                Text(
+                  timeago.format(widget.dm.lastMessageAt!,
+                      locale: 'en_short'),
+                  style: const TextStyle(
+                      color: SlekkeColors.textMuted, fontSize: 10),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "224585099790",
+    "project_id": "slekke-5f041",
+    "storage_bucket": "slekke-5f041.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:224585099790:android:c1734c4695f8b7d41c6a5f",
+        "android_client_info": {
+          "package_name": "com.slekke.slekke"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVSYz0NkCXCgmt6aP-zklv3me9xauqbaU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

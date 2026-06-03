@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOrgMember(orgId) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/organizations/$(orgId)).data.memberIds;
+    }
+
+    function isOrgOwner(orgId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId == request.auth.uid;
+    }
+
+    // Users can read any profile; only write their own
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Organizations
+    match /organizations/{orgId} {
+      // Members can read; non-members can read to look up an org by invite token
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.memberIds ||
+        resource.data.inviteToken is string
+      );
+      allow create: if isSignedIn();
+      // Members can make any update; signed-in users can self-join via invite token
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.memberIds ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members']) &&
+          request.auth.uid in request.resource.data.memberIds &&
+          !(request.auth.uid in resource.data.memberIds)
+        )
+      );
+      allow delete: if isOrgOwner(orgId);
+
+      // Roles — members can read; only org owner can write
+      match /roles/{roleId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgOwner(orgId);
+      }
+
+      // Member role assignments — members can read; only org owner can write
+      match /memberRoles/{userId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgOwner(orgId);
+      }
+
+      // Shells
+      match /shells/{shellId} {
+        allow read, write: if isOrgMember(orgId);
+
+        // Categories
+        match /categories/{categoryId} {
+          allow read, write: if isOrgMember(orgId);
+
+          // Channels
+          match /channels/{channelId} {
+            allow read, write: if isOrgMember(orgId);
+          }
+        }
+      }
+    }
+
+    // Messages — keyed by channel
+    match /channels/{channelId}/messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
+      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    // Typing indicators — users can only write/delete their own document
+    match /channels/{channelId}/typing/{userId} {
+      allow read: if isSignedIn();
+      allow write, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Direct messages
+    match /dms/{dmId} {
+      allow read: if isSignedIn() && (
+        resource == null ||
+        request.auth.uid in resource.data.participantIds
+      );
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participantIds;
+      allow update: if isSignedIn() &&
+        request.auth.uid in resource.data.participantIds &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['lastMessage', 'lastMessageAt']);
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/dms/$(dmId)).data.participantIds;
+        allow create: if isSignedIn() &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/dms/$(dmId)).data.participantIds;
+        allow update: if isSignedIn() &&
+          resource.data.authorId == request.auth.uid;
+        allow delete: if isSignedIn() &&
+          resource.data.authorId == request.auth.uid;
+      }
+
+      match /typing/{userId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/dms/$(dmId)).data.participantIds;
+        allow write, delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}
