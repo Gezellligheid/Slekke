@@ -191,6 +191,11 @@ class _MemberTileState extends ConsumerState<_MemberTile> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch live profile so avatar updates immediately when the user changes it
+    final liveProfile = ref.watch(userProfileProvider(widget.uid)).valueOrNull;
+    final photoUrl = liveProfile?.photoUrl ?? widget.photoUrl;
+    final displayName = liveProfile?.displayName ?? widget.displayName;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -211,16 +216,16 @@ class _MemberTileState extends ConsumerState<_MemberTile> {
           child: Row(
           children: [
             UserAvatar(
-              photoUrl: widget.photoUrl,
-              name: widget.displayName,
+              photoUrl: photoUrl,
+              name: displayName,
               size: 28,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 widget.isMe
-                    ? '${widget.displayName} (you)'
-                    : widget.displayName,
+                    ? '$displayName (you)'
+                    : displayName,
                 style: TextStyle(
                   color: widget.isMe
                       ? SlekkeColors.textMuted

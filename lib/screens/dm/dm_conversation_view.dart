@@ -72,6 +72,10 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
   Widget build(BuildContext context) {
     final myUid = ref.watch(currentUserProvider)?.uid ?? '';
     final other = widget.dm.other(myUid);
+    // Watch the other participant's live profile for real-time avatar updates
+    final liveOther = ref.watch(userProfileProvider(other.uid)).valueOrNull;
+    final otherPhotoUrl = liveOther?.photoUrl ?? other.photoUrl;
+    final otherDisplayName = liveOther?.displayName ?? other.displayName;
     final messagesAsync = ref.watch(messagesProvider(widget.dm.id));
     final replyTo = ref.watch(replyToMessageProvider);
     // Capture before ref.listen so the closure holds plain values —
@@ -100,13 +104,13 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
             child: Row(
               children: [
                 UserAvatar(
-                  photoUrl: other.photoUrl,
-                  name: other.displayName,
+                  photoUrl: otherPhotoUrl,
+                  name: otherDisplayName,
                   size: 32,
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  other.displayName,
+                  otherDisplayName,
                   style: const TextStyle(
                     color: SlekkeColors.textPrimary,
                     fontWeight: FontWeight.w700,
@@ -133,13 +137,13 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         UserAvatar(
-                          photoUrl: other.photoUrl,
-                          name: other.displayName,
+                          photoUrl: otherPhotoUrl,
+                          name: otherDisplayName,
                           size: 64,
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Start a conversation with ${other.displayName}',
+                          'Start a conversation with $otherDisplayName',
                           style: const TextStyle(
                               color: SlekkeColors.textSecondary,
                               fontSize: 14),

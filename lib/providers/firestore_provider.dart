@@ -27,6 +27,13 @@ final currentUserProfileProvider = StreamProvider<UserModel?>((ref) {
   return ref.watch(firestoreServiceProvider).watchUserProfile(user.uid);
 });
 
+// Live profile stream for any user by UID — use this wherever another user's
+// avatar or display name needs to reflect real-time Firestore changes.
+final userProfileProvider =
+    StreamProvider.family<UserModel?, String>((ref, uid) {
+  return ref.watch(firestoreServiceProvider).watchUserProfile(uid);
+});
+
 // ── Selected state ────────────────────────────────────────────────────────────
 
 final selectedOrgIdProvider = StateProvider<String?>((ref) => null);

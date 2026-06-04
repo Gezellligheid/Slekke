@@ -115,6 +115,11 @@ class _DmTileState extends ConsumerState<_DmTile> {
   Widget build(BuildContext context) {
     final myUid = ref.watch(currentUserProvider)?.uid ?? '';
     final other = widget.dm.other(myUid);
+    // Watch the other participant's live profile for real-time avatar updates
+    final liveOtherProfile =
+        ref.watch(userProfileProvider(other.uid)).valueOrNull;
+    final otherPhotoUrl = liveOtherProfile?.photoUrl ?? other.photoUrl;
+    final otherDisplayName = liveOtherProfile?.displayName ?? other.displayName;
     final reads = ref.watch(userReadsProvider).valueOrNull ?? {};
     final lastReadAt = reads['dm_${widget.dm.id}'];
     // Use dms/{id}.lastMessageAt if set; fall back to channels/{id}.lastMessageAt
@@ -154,8 +159,8 @@ class _DmTileState extends ConsumerState<_DmTile> {
           child: Row(
             children: [
               UserAvatar(
-                photoUrl: other.photoUrl,
-                name: other.displayName,
+                photoUrl: otherPhotoUrl,
+                name: otherDisplayName,
                 size: 36,
               ),
               const SizedBox(width: 10),
@@ -165,7 +170,7 @@ class _DmTileState extends ConsumerState<_DmTile> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      other.displayName,
+                      otherDisplayName,
                       style: TextStyle(
                         color: widget.selected || hasUnread
                             ? SlekkeColors.textPrimary
