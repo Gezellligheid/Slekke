@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/user_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/dm_model.dart';
@@ -98,33 +99,10 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: SlekkeColors.elevated,
-                        image: other.photoUrl != null
-                            ? DecorationImage(
-                                image: NetworkImage(other.photoUrl!),
-                                fit: BoxFit.cover)
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: other.photoUrl == null
-                          ? Text(
-                              other.displayName.isNotEmpty
-                                  ? other.displayName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                  color: SlekkeColors.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12))
-                          : null,
-                    ),
-                  ],
+                UserAvatar(
+                  photoUrl: other.photoUrl,
+                  name: other.displayName,
+                  size: 32,
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -154,29 +132,10 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: SlekkeColors.elevated,
-                            image: other.photoUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(other.photoUrl!),
-                                    fit: BoxFit.cover)
-                                : null,
-                          ),
-                          alignment: Alignment.center,
-                          child: other.photoUrl == null
-                              ? Text(
-                                  other.displayName.isNotEmpty
-                                      ? other.displayName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                      color: SlekkeColors.textPrimary,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w700))
-                              : null,
+                        UserAvatar(
+                          photoUrl: other.photoUrl,
+                          name: other.displayName,
+                          size: 64,
                         ),
                         const SizedBox(height: 12),
                         Text(

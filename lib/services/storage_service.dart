@@ -22,7 +22,14 @@ class StorageService {
     required Uint8List bytes,
     required String extension,
   }) async {
-    final compressed = await _resizeAndCompress(bytes, maxDim: 256);
+    final compressed = await _resizeAndCompress(bytes, maxDim: 400);
+    if (compressed.length > 700 * 1024) {
+      throw Exception(
+        'Profile picture still too large after compression '
+        '(${(compressed.length / 1024).round()} KB, max 700 KB). '
+        'Please choose a simpler image.',
+      );
+    }
     return 'data:image/jpeg;base64,${base64Encode(compressed)}';
   }
 

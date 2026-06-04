@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../models/dm_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
@@ -152,29 +153,10 @@ class _DmTileState extends ConsumerState<_DmTile> {
           ),
           child: Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: SlekkeColors.elevated,
-                  image: other.photoUrl != null
-                      ? DecorationImage(
-                          image: NetworkImage(other.photoUrl!),
-                          fit: BoxFit.cover)
-                      : null,
-                ),
-                alignment: Alignment.center,
-                child: other.photoUrl == null
-                    ? Text(
-                        other.displayName.isNotEmpty
-                            ? other.displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                            color: SlekkeColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14))
-                    : null,
+              UserAvatar(
+                photoUrl: other.photoUrl,
+                name: other.displayName,
+                size: 36,
               ),
               const SizedBox(width: 10),
               Expanded(

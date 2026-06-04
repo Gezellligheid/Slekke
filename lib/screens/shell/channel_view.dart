@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/user_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
@@ -281,33 +282,10 @@ class _PinnedMessagesPanel extends ConsumerWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Avatar
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: SlekkeColors.elevated,
-                                  image: msg.authorPhotoUrl != null
-                                      ? DecorationImage(
-                                          image: NetworkImage(msg.authorPhotoUrl!),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                ),
-                                alignment: Alignment.center,
-                                child: msg.authorPhotoUrl == null
-                                    ? Text(
-                                        msg.authorName.isNotEmpty
-                                            ? msg.authorName[0].toUpperCase()
-                                            : '?',
-                                        style: const TextStyle(
-                                          color: SlekkeColors.textPrimary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      )
-                                    : null,
+                              UserAvatar(
+                                photoUrl: msg.authorPhotoUrl,
+                                name: msg.authorName,
+                                size: 32,
                               ),
                               const SizedBox(width: 10),
                               Expanded(

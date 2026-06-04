@@ -11,6 +11,7 @@ import '../../core/config/notify_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/slekke_toggle.dart';
 import '../../models/settings_model.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -476,40 +477,28 @@ class _AccountSectionState extends ConsumerState<_AccountSection> {
                       cursor: SystemMouseCursors.click,
                       child: Stack(
                         children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: SlekkeColors.elevated,
-                              image: photoUrl != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(photoUrl),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                            ),
-                            alignment: Alignment.center,
-                            child: _uploadingPhoto
-                                ? const SizedBox(
+                          _uploadingPhoto
+                              ? Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: SlekkeColors.elevated,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: SlekkeColors.primary))
-                                : photoUrl == null
-                                    ? Text(
-                                        displayName.isNotEmpty
-                                            ? displayName[0].toUpperCase()
-                                            : '?',
-                                        style: const TextStyle(
-                                          color: SlekkeColors.textPrimary,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 20,
-                                        ),
-                                      )
-                                    : null,
-                          ),
+                                        color: SlekkeColors.primary),
+                                  ),
+                                )
+                              : UserAvatar(
+                                  photoUrl: photoUrl,
+                                  name: displayName,
+                                  size: 56,
+                                ),
                           if (!_uploadingPhoto)
                             Positioned(
                               bottom: 0,

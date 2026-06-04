@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
 
@@ -300,18 +301,7 @@ class _NotifRowState extends State<_NotifRow> {
           child: Row(
             children: [
               widget.photoUrl != null
-                  ? Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: SlekkeColors.elevated,
-                        image: DecorationImage(
-                          image: NetworkImage(widget.photoUrl!),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    )
+                  ? UserAvatar(photoUrl: widget.photoUrl, name: '', size: 28)
                   : Container(
                       width: 28,
                       height: 28,

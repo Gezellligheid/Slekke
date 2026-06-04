@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/firestore_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/widgets/context_menu.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../onboarding/create_or_join_screen.dart';
 import '../settings/settings_screen.dart';
 import 'notification_panel.dart';
@@ -1038,16 +1039,9 @@ class _HeaderIconBtn extends StatelessWidget {
 
 // ─── User avatar + profile panel ─────────────────────────────────────────────
 
-class _UserAvatar extends ConsumerStatefulWidget {
+class _UserAvatar extends ConsumerWidget {
   @override
-  ConsumerState<_UserAvatar> createState() => _UserAvatarState();
-}
-
-class _UserAvatarState extends ConsumerState<_UserAvatar> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final profile = ref.watch(currentUserProfileProvider).valueOrNull;
     final displayName = profile?.displayName ?? user?.displayName ?? '';
@@ -1056,11 +1050,9 @@ class _UserAvatarState extends ConsumerState<_UserAvatar> {
         ref.watch(userStatusProvider).valueOrNull ?? UserStatus.online;
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _showProfilePanel(context),
+        onTap: () => _showProfilePanel(context, ref),
         child: Row(
           children: [
             SizedBox(
@@ -1068,32 +1060,10 @@ class _UserAvatarState extends ConsumerState<_UserAvatar> {
               height: 36,
               child: Stack(
                 children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _hovered
-                          ? SlekkeColors.elevated
-                          : SlekkeColors.surface,
-                      image: photoUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(photoUrl),
-                              fit: BoxFit.cover)
-                          : null,
-                    ),
-                    alignment: Alignment.center,
-                    child: photoUrl == null
-                        ? Text(
-                            displayName.isNotEmpty
-                                ? displayName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                                color: SlekkeColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13))
-                        : null,
+                  UserAvatar(
+                    photoUrl: photoUrl,
+                    name: displayName,
+                    size: 36,
                   ),
                   Positioned(
                     bottom: 0,
@@ -1134,7 +1104,7 @@ class _UserAvatarState extends ConsumerState<_UserAvatar> {
     );
   }
 
-  void _showProfilePanel(BuildContext context) {
+  void _showProfilePanel(BuildContext context, WidgetRef ref) {
     final rootCtx = context;
     showDialog<void>(
       context: context,
@@ -1227,31 +1197,21 @@ class _ProfileCard extends ConsumerWidget {
                 Positioned(
                   left: 12,
                   top: 30,
+                  // Simulate the 3px border by using a circle container with
+                  // the surface colour as background + padding
                   child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
+                    width: 58,
+                    height: 58,
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: SlekkeColors.surface, width: 3),
-                      color: SlekkeColors.elevated,
-                      image: photoUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(photoUrl),
-                              fit: BoxFit.cover)
-                          : null,
+                      color: SlekkeColors.surface,
                     ),
-                    alignment: Alignment.center,
-                    child: photoUrl == null
-                        ? Text(
-                            displayName.isNotEmpty
-                                ? displayName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                                color: SlekkeColors.textPrimary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 20))
-                        : null,
+                    padding: const EdgeInsets.all(3),
+                    child: UserAvatar(
+                      photoUrl: photoUrl,
+                      name: displayName,
+                      size: 52,
+                    ),
                   ),
                 ),
               ],

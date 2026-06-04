@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/widgets/user_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -232,35 +233,8 @@ class _Avatar extends StatelessWidget {
   const _Avatar({this.photoUrl, required this.name});
 
   @override
-  Widget build(BuildContext context) {
-    if (photoUrl != null) {
-      return ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: photoUrl!,
-          width: 32,
-          height: 32,
-          fit: BoxFit.cover,
-        ),
-      );
-    }
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: SlekkeColors.elevated,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: const TextStyle(
-          color: SlekkeColors.textPrimary,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      UserAvatar(photoUrl: photoUrl, name: name, size: 32);
 }
 
 class _ReplyPreview extends ConsumerWidget {
@@ -425,7 +399,14 @@ class _ImageAttachmentState extends State<_ImageAttachment> {
                 _bytes!,
                 width: 240,
                 fit: BoxFit.cover,
-                cacheWidth: 480, // 2× for high-DPI, limits GPU texture size
+                cacheWidth: 480,
+                // Show placeholder until first frame is decoded.
+                // Without this, Image.memory has no size on its first frame
+                // (async decode) and the layout collapses it — causing the
+                // squashed appearance on real-time arrival.
+                frameBuilder: (context, child, frame, loaded) {
+                  return (loaded || frame != null) ? child : _placeholder();
+                },
                 errorBuilder: (context, e, s) => _placeholder(),
               )
             : CachedNetworkImage(

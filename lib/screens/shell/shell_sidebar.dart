@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../models/channel_model.dart';
 import '../../models/category_model.dart';
 import '../../core/widgets/context_menu.dart';
@@ -209,29 +210,10 @@ class _MemberTileState extends ConsumerState<_MemberTile> {
           ),
           child: Row(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: SlekkeColors.elevated,
-                image: widget.photoUrl != null
-                    ? DecorationImage(
-                        image: NetworkImage(widget.photoUrl!),
-                        fit: BoxFit.cover)
-                    : null,
-              ),
-              alignment: Alignment.center,
-              child: widget.photoUrl == null
-                  ? Text(
-                      widget.displayName.isNotEmpty
-                          ? widget.displayName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                          color: SlekkeColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11))
-                  : null,
+            UserAvatar(
+              photoUrl: widget.photoUrl,
+              name: widget.displayName,
+              size: 28,
             ),
             const SizedBox(width: 8),
             Expanded(
