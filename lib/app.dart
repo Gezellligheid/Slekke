@@ -7,6 +7,7 @@ import 'providers/auth_provider.dart';
 import 'providers/firestore_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
+import 'services/push_notification_service.dart';
 
 class SlekkeApp extends ConsumerWidget {
   const SlekkeApp({super.key});
@@ -51,6 +52,12 @@ class _DmNotificationWatcherState
 
   @override
   Widget build(BuildContext context) {
+    // Initialise push notifications once the user is signed in
+    final user = ref.watch(currentUserProvider);
+    if (user != null) {
+      PushNotificationService.initialize(ref);
+    }
+
     // ── DM notifications via single stream ──────────────────────────────────
     ref.listen<AsyncValue<List<DmModel>>>(userDmsProvider, (prev, next) {
       final dms = next.valueOrNull;

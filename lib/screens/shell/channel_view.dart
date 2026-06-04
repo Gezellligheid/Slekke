@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/channel_model.dart';
 import '../../models/message_model.dart';
@@ -96,6 +97,8 @@ class _ChannelHeader extends ConsumerWidget {
             ),
           ] else
             const Spacer(),
+          if (channel.githubRepo != null && channel.githubRepo!.isNotEmpty)
+            _GitHubBadge(url: channel.githubRepo!),
           if (pinnedCount > 0)
             Tooltip(
               message: '$pinnedCount pinned message${pinnedCount == 1 ? '' : 's'}',
@@ -131,6 +134,60 @@ class _ChannelHeader extends ConsumerWidget {
       context: context,
       barrierColor: Colors.black45,
       builder: (_) => _PinnedMessagesPanel(channel: channel),
+    );
+  }
+}
+
+// ─── GitHub badge ─────────────────────────────────────────────────────────────
+
+class _GitHubBadge extends StatelessWidget {
+  final String url;
+  const _GitHubBadge({required this.url});
+
+  String get _displayName {
+    final clean = url
+        .replaceFirst('https://github.com/', '')
+        .replaceFirst('http://github.com/', '')
+        .replaceFirst('github.com/', '');
+    // trim trailing slash
+    return clean.endsWith('/') ? clean.substring(0, clean.length - 1) : clean;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Open GitHub repository',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () async {
+          final uri = Uri.tryParse(url);
+          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          margin: const EdgeInsets.only(right: 4),
+          decoration: BoxDecoration(
+            color: SlekkeColors.elevated,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: SlekkeColors.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.code, size: 14, color: SlekkeColors.textMuted),
+              const SizedBox(width: 5),
+              Text(
+                _displayName,
+                style: const TextStyle(
+                  color: SlekkeColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -12,7 +12,8 @@
 .swiftpm/
 migrate_working_dir/
 .env.json
-
+vercel-notify/node_modules
+functions/node_modules
 # IntelliJ related
 *.iml
 *.ipr

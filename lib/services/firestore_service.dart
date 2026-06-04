@@ -59,6 +59,24 @@ class FirestoreService {
     return _db.collection('users').doc(uid).update(data);
   }
 
+  // ── Push notification tokens ─────────────────────────────────────────────────
+
+  Future<void> saveFcmToken({
+    required String uid,
+    required String token,
+    required String platform,
+  }) =>
+      _db
+          .collection('users')
+          .doc(uid)
+          .collection('fcmTokens')
+          .doc(token)
+          .set({
+            'token': token,
+            'platform': platform,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
   // ── Unread tracking ──────────────────────────────────────────────────────────
 
   Stream<DateTime?> watchChannelLastMessageAt(String channelId) => _db
@@ -606,10 +624,16 @@ class FirestoreService {
     required String channelId,
     String? name,
     String? topic,
+    // Pass empty string to remove the repo link
+    String? githubRepo,
   }) async {
     final updates = <String, dynamic>{};
     if (name != null) updates['name'] = name;
     if (topic != null) updates['topic'] = topic;
+    if (githubRepo != null) {
+      updates['githubRepo'] =
+          githubRepo.isEmpty ? FieldValue.delete() : githubRepo;
+    }
     await _db
         .collection('organizations')
         .doc(orgId)

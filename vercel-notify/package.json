@@ -1,0 +1,9 @@
+{
+  "name": "slekke-notify",
+  "version": "1.0.0",
+  "description": "Serverless push notification endpoint for Slekke",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

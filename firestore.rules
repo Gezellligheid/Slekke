@@ -25,6 +25,11 @@ service cloud.firestore {
       match /reads/{docId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
+
+      // FCM push tokens — each user owns their own
+      match /fcmTokens/{token} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // Organizations
