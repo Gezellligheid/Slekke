@@ -16,6 +16,7 @@ dependencies:
   cloud_firestore: ^5.6.0
   firebase_storage: ^12.4.0
   firebase_messaging: ^15.2.5
+  local_notifier: ^0.1.6
   google_sign_in: ^6.2.2
 
   # State management
