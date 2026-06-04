@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_notifier/local_notifier.dart';
 import '../providers/firestore_provider.dart';
 import '../providers/settings_provider.dart';
 import 'sound_player.dart';
@@ -9,6 +11,11 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   ref.onDispose(service.dispose);
   return service;
 });
+
+Future<void> initLocalNotifications() async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+  await localNotifier.setup(appName: 'Slekke');
+}
 
 class NotificationService with WidgetsBindingObserver {
   final Ref _ref;
@@ -23,20 +30,19 @@ class NotificationService with WidgetsBindingObserver {
     _appFocused = state == AppLifecycleState.resumed;
   }
 
-  void onNewMessage({required String channelId, bool isDm = false}) {
+  void onNewMessage({
+    required String channelId,
+    bool isDm = false,
+    String? senderName,
+    String? preview,
+  }) {
     final settings = _ref.read(settingsProvider);
 
-    // Master toggle gates everything
     if (!settings.notificationsEnabled) return;
-
-    // Type-specific toggles
     if (isDm && !settings.notifyDirectMessages) return;
     if (!isDm && !settings.notifyAllChannelMessages) return;
 
-    // Sound toggle — badges still show regardless, only sound is gated here
-    if (!settings.notifySoundEnabled) return;
-
-    // Don't sound if the user is already looking at that conversation
+    // Don't notify if the user is already looking at that conversation
     if (_appFocused) {
       final selectedChannel = _ref.read(selectedChannelProvider);
       final selectedDmId = _ref.read(selectedDmIdProvider);
@@ -45,7 +51,16 @@ class NotificationService with WidgetsBindingObserver {
       if (!isDm && !dmMode && selectedChannel?.id == channelId) return;
     }
 
-    playNotificationSound();
+    if (settings.notifySoundEnabled) playNotificationSound();
+
+    // Windows toast notification
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      final notification = LocalNotification(
+        title: senderName ?? (isDm ? 'New message' : 'New channel message'),
+        body: (preview?.isNotEmpty == true) ? preview : null,
+      );
+      notification.show();
+    }
   }
 
   void dispose() {

@@ -89,6 +89,8 @@ class _DmNotificationWatcherState
         ref.read(notificationServiceProvider).onNewMessage(
               channelId: dm.id,
               isDm: true,
+              senderName: dm.other(ref.read(currentUserProvider)?.uid ?? '').displayName,
+              preview: dm.lastMessage,
             );
         break; // one sound per batch update
       }
