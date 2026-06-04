@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import '../../core/config/notify_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/slekke_toggle.dart';
 import '../../models/settings_model.dart';
@@ -1170,7 +1175,132 @@ class _NotificationsSection extends ConsumerWidget {
             ),
           ),
         ),
+        const SizedBox(height: 24),
+        _SettingsGroup(
+          label: 'Test',
+          children: [
+            _TestNotificationRow(),
+          ],
+        ),
       ],
+    );
+  }
+}
+
+// ─── Test notification row ────────────────────────────────────────────────────
+
+enum _TestStatus { idle, loading, success, noEndpoint, noToken, error }
+
+class _TestNotificationRow extends StatefulWidget {
+  @override
+  State<_TestNotificationRow> createState() => _TestNotificationRowState();
+}
+
+class _TestNotificationRowState extends State<_TestNotificationRow> {
+  _TestStatus _status = _TestStatus.idle;
+
+  String get _label => switch (_status) {
+        _TestStatus.idle =>
+          'Put the app in background, then tap Send test.',
+        _TestStatus.loading => 'Sending…',
+        _TestStatus.success =>
+          '✓ Sent — check your OS notifications.',
+        _TestStatus.noEndpoint =>
+          'Set NOTIFY_ENDPOINT in your build config first.',
+        _TestStatus.noToken =>
+          'No FCM token yet — grant notification permission.',
+        _TestStatus.error => '✗ Failed — check the Vercel logs.',
+      };
+
+  Color get _labelColor => switch (_status) {
+        _TestStatus.success => SlekkeColors.success,
+        _TestStatus.error ||
+        _TestStatus.noEndpoint ||
+        _TestStatus.noToken =>
+          SlekkeColors.danger,
+        _ => SlekkeColors.textMuted,
+      };
+
+  Future<void> _send() async {
+    final endpoint = NotifyConfig.endpointUrl;
+    if (endpoint.isEmpty) {
+      setState(() => _status = _TestStatus.noEndpoint);
+      return;
+    }
+
+    setState(() => _status = _TestStatus.loading);
+
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final token = await messaging.getToken(
+        vapidKey: kIsWeb ? NotifyConfig.webVapidKey : null,
+      );
+      if (token == null) {
+        setState(() => _status = _TestStatus.noToken);
+        return;
+      }
+
+      final testUrl = endpoint.replaceAll('/api/notify', '/api/test');
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      final secret = NotifyConfig.secret;
+      if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
+
+      final response = await http.post(
+        Uri.parse(testUrl),
+        headers: headers,
+        body: jsonEncode({'token': token}),
+      );
+
+      setState(() => _status =
+          response.statusCode == 200 ? _TestStatus.success : _TestStatus.error);
+    } catch (_) {
+      setState(() => _status = _TestStatus.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Test push notification',
+                    style: TextStyle(
+                        color: SlekkeColors.textPrimary, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(_label,
+                    style: TextStyle(color: _labelColor, fontSize: 12)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (_status == _TestStatus.loading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: SlekkeColors.primary),
+            )
+          else
+            TextButton(
+              onPressed: _send,
+              style: TextButton.styleFrom(
+                foregroundColor: SlekkeColors.primary,
+                minimumSize: Size.zero,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              child: const Text('Send test'),
+            ),
+        ],
+      ),
     );
   }
 }

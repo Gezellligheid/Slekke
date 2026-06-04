@@ -651,6 +651,21 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
         label: 'Mark as read',
       ),
       if (canManage) ...[
+        ContextMenuItem(
+          value: 'github',
+          icon: Icons.code,
+          label: widget.channel.githubRepo?.isNotEmpty == true
+              ? 'Change GitHub repo'
+              : 'Connect GitHub repo',
+          dividerAbove: true,
+        ),
+        if (widget.channel.githubRepo?.isNotEmpty == true)
+          const ContextMenuItem(
+            value: 'github_disconnect',
+            icon: Icons.link_off,
+            label: 'Disconnect GitHub repo',
+            color: SlekkeColors.danger,
+          ),
         const ContextMenuItem(
           value: 'add_channel',
           icon: Icons.tag,
@@ -711,6 +726,25 @@ class _ChannelTileState extends ConsumerState<_ChannelTile> {
               shellId: widget.channel.shellId,
               name: catName,
               position: cats.length,
+            );
+      case 'github':
+        final url = await _githubDialog(
+            context, widget.channel.githubRepo ?? '');
+        if (url == null || !context.mounted) return;
+        await ref.read(firestoreServiceProvider).updateChannel(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              categoryId: widget.channel.categoryId,
+              channelId: widget.channel.id,
+              githubRepo: url,
+            );
+      case 'github_disconnect':
+        await ref.read(firestoreServiceProvider).updateChannel(
+              orgId: widget.channel.organizationId,
+              shellId: widget.channel.shellId,
+              categoryId: widget.channel.categoryId,
+              channelId: widget.channel.id,
+              githubRepo: '',
             );
       case 'rename':
         final name = await _nameDialog(context, 'Rename Channel', 'New name');
@@ -792,6 +826,85 @@ Future<bool?> _confirmDelete(BuildContext context, String message) =>
         ],
       ),
     );
+
+// Returns the entered URL, or null if cancelled.
+// Pass [initial] to pre-fill with the existing URL.
+Future<String?> _githubDialog(BuildContext context, String initial) async {
+  final ctrl = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => Dialog(
+      child: SizedBox(
+        width: 400,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'CONNECT GITHUB REPOSITORY',
+                style: TextStyle(
+                  color: SlekkeColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Paste the full GitHub URL (e.g. https://github.com/owner/repo)',
+                style: TextStyle(color: SlekkeColors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                style: const TextStyle(
+                    color: SlekkeColors.textPrimary, fontSize: 13),
+                decoration:
+                    const InputDecoration(hintText: 'https://github.com/…'),
+                autofocus: true,
+                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: SlekkeColors.textMuted,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: SlekkeColors.primary,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      textStyle: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+                    child: const Text('Connect'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 Future<String?> _nameDialog(
   BuildContext context,

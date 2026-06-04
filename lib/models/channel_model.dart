@@ -10,8 +10,9 @@ class ChannelModel {
   final String name;
   final ChannelType type;
   final int position;
-  final String? parentChannelId; // for sub-channels
+  final String? parentChannelId;
   final String? topic;
+  final String? githubRepo;
 
   const ChannelModel({
     required this.id,
@@ -23,6 +24,7 @@ class ChannelModel {
     required this.position,
     this.parentChannelId,
     this.topic,
+    this.githubRepo,
   });
 
   factory ChannelModel.fromDoc(
@@ -42,6 +44,7 @@ class ChannelModel {
       position: d['position'] ?? 0,
       parentChannelId: d['parentChannelId'],
       topic: d['topic'],
+      githubRepo: d['githubRepo'] as String?,
     );
   }
 
