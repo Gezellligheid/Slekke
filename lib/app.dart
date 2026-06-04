@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
@@ -8,6 +9,18 @@ import 'providers/firestore_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
 import 'services/push_notification_service.dart';
+
+// Enables mouse drag-scrolling and trackpad on desktop.
+class _SmoothScrollBehavior extends MaterialScrollBehavior {
+  const _SmoothScrollBehavior();
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
 
 class SlekkeApp extends ConsumerWidget {
   const SlekkeApp({super.key});
@@ -21,6 +34,7 @@ class SlekkeApp extends ConsumerWidget {
       title: 'Slekke',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
+      scrollBehavior: const _SmoothScrollBehavior(),
       routerConfig: router,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
@@ -91,6 +105,7 @@ class _DmNotificationWatcherState
               isDm: true,
               senderName: dm.other(ref.read(currentUserProvider)?.uid ?? '').displayName,
               preview: dm.lastMessage,
+              messageId: dm.lastMessageId,
             );
         break; // one sound per batch update
       }
@@ -100,7 +115,9 @@ class _DmNotificationWatcherState
     final orgId = ref.watch(selectedOrgIdProvider);
     final currentUid = ref.watch(currentUserProvider)?.uid;
     if (orgId != null) {
-      ref.listen<AsyncValue<Map<String, ({DateTime? at, String? authorId})>>>(
+      ref.listen<
+          AsyncValue<
+              Map<String, ({DateTime? at, String? authorId, String? messageId})>>>(
         orgChannelMetaProvider(orgId),
         (prev, next) {
           final prevMeta = prev?.valueOrNull;
@@ -113,9 +130,11 @@ class _DmNotificationWatcherState
             if (newTime == null) continue;
             if (authorId != null && authorId == currentUid) continue;
             if (oldTime == null || newTime.isAfter(oldTime)) {
-              ref
-                  .read(notificationServiceProvider)
-                  .onNewMessage(channelId: entry.key);
+              ref.read(notificationServiceProvider).onNewMessage(
+                    channelId: entry.key,
+                    orgId: orgId,
+                    messageId: entry.value.messageId,
+                  );
             }
           }
         },

@@ -35,6 +35,9 @@ class NotificationService with WidgetsBindingObserver {
     bool isDm = false,
     String? senderName,
     String? preview,
+    String? messageId,
+    String? orgId,
+    String? shellId,
   }) {
     final settings = _ref.read(settingsProvider);
 
@@ -55,12 +58,53 @@ class NotificationService with WidgetsBindingObserver {
 
     // Windows toast notification
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-      final notification = LocalNotification(
+      _showWindowsToast(
         title: senderName ?? (isDm ? 'New message' : 'New channel message'),
         body: (preview?.isNotEmpty == true) ? preview : null,
+        channelId: channelId,
+        isDm: isDm,
+        messageId: messageId,
+        orgId: orgId,
+        shellId: shellId,
       );
-      notification.show();
     }
+  }
+
+  void _showWindowsToast({
+    required String title,
+    String? body,
+    required String channelId,
+    required bool isDm,
+    String? messageId,
+    String? orgId,
+    String? shellId,
+  }) {
+    final notification = LocalNotification(title: title, body: body);
+
+    notification.onClick = () {
+      // Navigate to the right conversation
+      if (isDm) {
+        _ref.read(dmModeProvider.notifier).state = true;
+        _ref.read(selectedDmIdProvider.notifier).state = channelId;
+      } else {
+        _ref.read(dmModeProvider.notifier).state = false;
+        if (orgId != null) {
+          _ref.read(selectedOrgIdProvider.notifier).state = orgId;
+        }
+        if (shellId != null) {
+          _ref.read(selectedShellIdProvider.notifier).state = shellId;
+        }
+      }
+
+      // Highlight the specific message after the channel/DM view has loaded
+      if (messageId != null) {
+        Future.delayed(const Duration(milliseconds: 600), () {
+          _ref.read(highlightedMessageIdProvider.notifier).state = messageId;
+        });
+      }
+    };
+
+    notification.show();
   }
 
   void dispose() {
