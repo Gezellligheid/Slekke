@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -393,26 +395,54 @@ class _EditFieldState extends State<_EditField> {
   }
 }
 
-class _ImageAttachment extends StatelessWidget {
+class _ImageAttachment extends StatefulWidget {
   final String url;
   const _ImageAttachment({required this.url});
 
   @override
+  State<_ImageAttachment> createState() => _ImageAttachmentState();
+}
+
+class _ImageAttachmentState extends State<_ImageAttachment> {
+  // Decoded once in initState — never repeated on scroll rebuilds.
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.url.startsWith('data:')) {
+      _bytes = base64Decode(widget.url.split(',').last);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: CachedNetworkImage(
-        imageUrl: url,
-        width: 240,
-        fit: BoxFit.cover,
-        placeholder: (ctx, progress) => Container(
-          width: 240,
-          height: 160,
-          color: SlekkeColors.inputBg,
-        ),
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: _bytes != null
+            ? Image.memory(
+                _bytes!,
+                width: 240,
+                fit: BoxFit.cover,
+                cacheWidth: 480, // 2× for high-DPI, limits GPU texture size
+                errorBuilder: (context, e, s) => _placeholder(),
+              )
+            : CachedNetworkImage(
+                imageUrl: widget.url,
+                width: 240,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => _placeholder(),
+              ),
       ),
     );
   }
+
+  Widget _placeholder() => Container(
+        width: 240,
+        height: 160,
+        color: SlekkeColors.inputBg,
+      );
 }
 
 class _MessageActions extends ConsumerWidget {

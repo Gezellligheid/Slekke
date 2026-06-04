@@ -30,6 +30,7 @@ class DmModel {
   final String? lastMessage;
   final DateTime? lastMessageAt;
   final String? lastMessageAuthorId;
+  final String? lastMessageId;
 
   const DmModel({
     required this.id,
@@ -37,6 +38,7 @@ class DmModel {
     this.lastMessage,
     this.lastMessageAt,
     this.lastMessageAuthorId,
+    this.lastMessageId,
   });
 
   // Stable ID: sort UIDs so A→B and B→A always produce the same document
@@ -60,6 +62,7 @@ class DmModel {
       lastMessage: d['lastMessage'] as String?,
       lastMessageAt: (d['lastMessageAt'] as Timestamp?)?.toDate(),
       lastMessageAuthorId: d['lastMessageAuthorId'] as String?,
+      lastMessageId: d['lastMessageId'] as String?,
     );
   }
 }

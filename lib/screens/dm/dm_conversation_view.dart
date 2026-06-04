@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
@@ -20,6 +21,29 @@ class DmConversationView extends ConsumerStatefulWidget {
 class _DmConversationViewState extends ConsumerState<DmConversationView> {
   final _scrollCtrl = ScrollController();
   bool _atBottom = true;
+  double _wheelTarget = 0;
+
+  void _jumpToBottom() {
+    final max = _scrollCtrl.position.maxScrollExtent;
+    _wheelTarget = max;
+    _scrollCtrl.jumpTo(max);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scrollCtrl.hasClients) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+      if (e is! PointerScrollEvent) return;
+      final pos = _scrollCtrl.position;
+      if (!pos.isScrollingNotifier.value) _wheelTarget = pos.pixels;
+      _wheelTarget = (_wheelTarget + e.scrollDelta.dy)
+          .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      _scrollCtrl.animateTo(
+        _wheelTarget,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
 
   @override
   void initState() {
@@ -30,11 +54,9 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollCtrl.hasClients) return;
-      _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      _jumpToBottom();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollCtrl.hasClients) {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-        }
+        if (mounted && _scrollCtrl.hasClients) _jumpToBottom();
       });
     });
   }
@@ -59,9 +81,7 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
 
     ref.listen(messagesProvider(dmId), (prev, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_atBottom && _scrollCtrl.hasClients) {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-        }
+        if (_atBottom && _scrollCtrl.hasClients) _jumpToBottom();
       });
       if (myUid.isNotEmpty) {
         svc.markDmRead(myUid, dmId);
@@ -170,8 +190,11 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
                   );
                 }
 
-                return ListView.builder(
+                return Listener(
+                  onPointerSignal: _onPointerSignal,
+                  child: ListView.builder(
                   controller: _scrollCtrl,
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   itemCount: messages.length,
                   itemBuilder: (_, i) {
@@ -189,7 +212,7 @@ class _DmConversationViewState extends ConsumerState<DmConversationView> {
                       channelId: widget.dm.id,
                     );
                   },
-                );
+                ));  // ListView.builder + Listener
               },
             ),
           ),

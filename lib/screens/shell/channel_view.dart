@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -406,6 +407,8 @@ class _MessageListState extends ConsumerState<_MessageList> {
   bool _loadingMore = false;
   bool _noMore = false;
 
+  double _wheelTarget = 0;
+
   @override
   void initState() {
     super.initState();
@@ -413,15 +416,34 @@ class _MessageListState extends ConsumerState<_MessageList> {
     _markRead();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollCtrl.hasClients) return;
-      _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-      // Second pass: ListView.builder measures lazily, so maxScrollExtent
-      // may not be final on the first frame. A second callback ensures
-      // we land at the true bottom once layout has fully settled.
+      _jumpToBottom();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollCtrl.hasClients) {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-        }
+        if (mounted && _scrollCtrl.hasClients) _jumpToBottom();
       });
+    });
+  }
+
+  void _jumpToBottom() {
+    final max = _scrollCtrl.position.maxScrollExtent;
+    _wheelTarget = max;
+    _scrollCtrl.jumpTo(max);
+  }
+
+  // Register with PointerSignalResolver so this handler wins exclusively —
+  // the Scrollable's built-in handler never fires, preventing double-scroll.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scrollCtrl.hasClients) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+      if (e is! PointerScrollEvent) return;
+      final pos = _scrollCtrl.position;
+      if (!pos.isScrollingNotifier.value) _wheelTarget = pos.pixels;
+      _wheelTarget = (_wheelTarget + e.scrollDelta.dy)
+          .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      _scrollCtrl.animateTo(
+        _wheelTarget,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
     });
   }
 
@@ -451,9 +473,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
           .onNewMessage(channelId: widget.channelId);
       if (_atBottom) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollCtrl.hasClients) {
-            _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-          }
+          if (_scrollCtrl.hasClients) _jumpToBottom();
         });
       }
     }
@@ -492,7 +512,9 @@ class _MessageListState extends ConsumerState<_MessageList> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_scrollCtrl.hasClients) return;
           final added = _scrollCtrl.position.maxScrollExtent - prevExtent;
-          _scrollCtrl.jumpTo(_scrollCtrl.offset + added);
+          final newOffset = _scrollCtrl.offset + added;
+          _wheelTarget = newOffset;
+          _scrollCtrl.jumpTo(newOffset);
         });
       }
     } finally {
@@ -529,8 +551,11 @@ class _MessageListState extends ConsumerState<_MessageList> {
 
     final hasHeader = _loadingMore || _noMore;
 
-    return ListView.builder(
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: ListView.builder(
       controller: _scrollCtrl,
+      physics: const ClampingScrollPhysics(),
       padding: EdgeInsets.only(top: hasHeader ? 0 : 16, bottom: 16),
       itemCount: all.length + (hasHeader ? 1 : 0),
       itemBuilder: (_, i) {
@@ -570,7 +595,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
           channelId: widget.channelId,
         );
       },
-    );
+    ));  // ListView.builder + Listener
   }
 }
 

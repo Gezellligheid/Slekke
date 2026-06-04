@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +28,7 @@ class _MessageInputState extends ConsumerState<MessageInput> {
   final _ctrl = TextEditingController();
   final _focusNode = FocusNode();
   bool _sending = false;
-  List<File> _attachments = [];
+  List<PlatformFile> _attachments = [];
   Timer? _typingTimer;
   bool _isTyping = false;
 
@@ -117,9 +116,11 @@ class _MessageInputState extends ConsumerState<MessageInput> {
       if (_attachments.isNotEmpty) {
         final storage = ref.read(_storageServiceProvider);
         for (final file in _attachments) {
+          if (file.bytes == null) continue;
           final url = await storage.uploadMessageImage(
             channelId: widget.channelId,
-            file: file,
+            bytes: file.bytes!,
+            fileName: file.name,
           );
           imageUrls.add(url);
         }
@@ -134,23 +135,16 @@ class _MessageInputState extends ConsumerState<MessageInput> {
       // Mark as read BEFORE sending so our own message doesn't flash as unread.
       if (isDm) {
         svc.markDmRead(user.uid, widget.channelId);
-        if (text.isNotEmpty) {
-          svc.updateDmLastMessage(
-              dmId: widget.channelId, lastMessage: text, authorId: user.uid);
-        }
       } else {
         svc.markChannelRead(user.uid, widget.channelId);
       }
 
-      await svc.sendMessage(
+      final messageId = await svc.sendMessage(
         channelId: widget.channelId,
         content: text,
         authorId: user.uid,
         authorName: ref.read(currentUserProfileProvider).valueOrNull?.displayName ?? user.displayName ?? 'Unknown',
         authorPhotoUrl: ref.read(currentUserProfileProvider).valueOrNull?.photoUrl ?? user.photoURL,
-        // DMs must not carry org/shell metadata — otherwise the flat channels
-        // doc gets tagged with the sender's current org and appears as an
-        // unread channel in watchOrgChannelMeta.
         shellId: isDm ? null : ref.read(selectedShellIdProvider),
         orgId: isDm ? null : ref.read(selectedOrgIdProvider),
         channelName: isDm ? null : ref.read(selectedChannelProvider)?.name,
@@ -163,8 +157,16 @@ class _MessageInputState extends ConsumerState<MessageInput> {
         imageUrls: imageUrls,
       );
 
+      // Update DM last-message metadata after we have the real message ID
+      if (isDm && text.isNotEmpty) {
+        svc.updateDmLastMessage(
+            dmId: widget.channelId,
+            lastMessage: text,
+            authorId: user.uid,
+            messageId: messageId);
+      }
+
       // Post-send mark-as-read: guarantees lastReadAt ≥ lastMessageAt
-      // even if the pre-send mark lost the server-timestamp race.
       if (isDm) {
         svc.markDmRead(user.uid, widget.channelId);
       } else {
@@ -320,10 +322,11 @@ class _MessageInputState extends ConsumerState<MessageInput> {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: FileType.image,
+      withData: true,
     );
     if (result == null) return;
     setState(() {
-      _attachments = result.paths.whereType<String>().map(File.new).toList();
+      _attachments = result.files.where((f) => f.bytes != null).toList();
     });
   }
 
@@ -348,8 +351,8 @@ class _MessageInputState extends ConsumerState<MessageInput> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: Image.file(
-                        _attachments[i],
+                      child: Image.memory(
+                        _attachments[i].bytes!,
                         width: 80,
                         height: 64,
                         fit: BoxFit.cover,

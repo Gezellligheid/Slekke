@@ -1,22 +1,20 @@
-import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:uuid/uuid.dart';
-import 'package:path/path.dart' as p;
+import 'package:image/image.dart' as img;
 
+// Images are resized (max 1280px), compressed to JPEG, then stored inline in
+// Firestore message documents as base64 data URLs. No storage service needed.
 class StorageService {
-  final _storage = FirebaseStorage.instance;
-  final _uuid = const Uuid();
+  static const _maxDimension = 1280;
+  static const _jpegQuality = 82;
 
   Future<String> uploadMessageImage({
     required String channelId,
-    required File file,
+    required Uint8List bytes,
+    required String fileName,
   }) async {
-    final ext = p.extension(file.path);
-    final name = _uuid.v4();
-    final ref = _storage.ref('channels/$channelId/images/$name$ext');
-    final task = await ref.putFile(file);
-    return task.ref.getDownloadURL();
+    final compressed = await _resizeAndCompress(bytes);
+    return 'data:image/jpeg;base64,${base64Encode(compressed)}';
   }
 
   Future<String> uploadProfilePicture({
@@ -24,18 +22,29 @@ class StorageService {
     required Uint8List bytes,
     required String extension,
   }) async {
-    final ext = extension.startsWith('.') ? extension : '.$extension';
-    final ref = _storage.ref('users/$uid/avatar$ext');
-    final task = await ref.putData(
-      bytes,
-      SettableMetadata(contentType: 'image/${ext.replaceFirst('.', '')}'),
-    );
-    return task.ref.getDownloadURL();
+    final compressed = await _resizeAndCompress(bytes, maxDim: 256);
+    return 'data:image/jpeg;base64,${base64Encode(compressed)}';
   }
 
-  Future<void> deleteFile(String url) async {
-    try {
-      await _storage.refFromURL(url).delete();
-    } catch (_) {}
+  Future<void> deleteFile(String url) async {}
+
+  static Future<Uint8List> _resizeAndCompress(
+    Uint8List bytes, {
+    int maxDim = _maxDimension,
+  }) async {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+
+    img.Image resized;
+    if (decoded.width > maxDim || decoded.height > maxDim) {
+      resized = decoded.width >= decoded.height
+          ? img.copyResize(decoded, width: maxDim)
+          : img.copyResize(decoded, height: maxDim);
+    } else {
+      resized = decoded;
+    }
+
+    return Uint8List.fromList(img.encodeJpg(resized, quality: _jpegQuality));
   }
+
 }

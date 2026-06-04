@@ -121,7 +121,8 @@ final shellChannelMetaProvider =
 });
 
 final orgChannelMetaProvider = StreamProvider.family<
-    Map<String, ({DateTime? at, String? authorId})>, String>((ref, orgId) {
+    Map<String, ({DateTime? at, String? authorId, String? messageId})>,
+    String>((ref, orgId) {
   return ref.watch(firestoreServiceProvider).watchOrgChannelMeta(orgId);
 });
 

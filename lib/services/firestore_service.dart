@@ -138,19 +138,22 @@ class FirestoreService {
               d.id: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
           });
 
-  Stream<Map<String, ({DateTime? at, String? authorId})>> watchOrgChannelMeta(
-          String orgId) =>
-      _db
-          .collection('channels')
-          .where('orgId', isEqualTo: orgId)
-          .snapshots()
-          .map((s) => {
-                for (final d in s.docs)
-                  d.id: (
-                    at: (d.data()['lastMessageAt'] as Timestamp?)?.toDate(),
-                    authorId: d.data()['lastMessageAuthorId'] as String?,
-                  ),
-              });
+  Stream<Map<String, ({DateTime? at, String? authorId, String? messageId})>>
+      watchOrgChannelMeta(String orgId) =>
+          _db
+              .collection('channels')
+              .where('orgId', isEqualTo: orgId)
+              .snapshots()
+              .map((s) => {
+                    for (final d in s.docs)
+                      d.id: (
+                        at: (d.data()['lastMessageAt'] as Timestamp?)
+                            ?.toDate(),
+                        authorId:
+                            d.data()['lastMessageAuthorId'] as String?,
+                        messageId: d.data()['lastMessageId'] as String?,
+                      ),
+                  });
 
   Stream<List<ChannelNotifEntry>> watchOrgChannelNotifications(String orgId) =>
       _db
@@ -715,11 +718,13 @@ class FirestoreService {
     required String dmId,
     required String lastMessage,
     required String authorId,
+    String? messageId,
   }) =>
       _db.collection('dms').doc(dmId).update({
         'lastMessage': lastMessage,
         'lastMessageAt': FieldValue.serverTimestamp(),
         'lastMessageAuthorId': authorId,
+        if (messageId != null) 'lastMessageId': messageId,
       });
 
   // ── Typing ─────────────────────────────────────────────────────────────────
@@ -810,7 +815,7 @@ class FirestoreService {
     return doc.exists ? doc : null;
   }
 
-  Future<void> sendMessage({
+  Future<String> sendMessage({
     required String channelId,
     required String content,
     required String authorId,
@@ -837,8 +842,12 @@ class FirestoreService {
     if (shellName != null) meta['shellName'] = shellName;
     if (categoryId != null) meta['categoryId'] = categoryId;
 
+    // Pre-generate the message ID so we can store it in the flat metadata doc
+    final msgRef = _messages(channelId).doc();
+    meta['lastMessageId'] = msgRef.id;
+
     await Future.wait([
-      _messages(channelId).add({
+      msgRef.set({
         'channelId': channelId,
         'content': content,
         'authorId': authorId,
@@ -854,13 +863,11 @@ class FirestoreService {
         'isEdited': false,
         'editedAt': null,
       }),
-      // DMs (orgId == null): replace the whole doc so stale orgId/shellId fields
-      // from earlier buggy sends are removed. Channels: merge to preserve any
-      // other metadata written outside of sendMessage.
       orgId == null
           ? _db.collection('channels').doc(channelId).set(meta)
           : _db.collection('channels').doc(channelId).set(meta, SetOptions(merge: true)),
     ]);
+    return msgRef.id;
   }
 
   Future<void> togglePinMessage({
